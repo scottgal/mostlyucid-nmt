@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:www.mostlylucid.net)"
+      "WebFetch(domain:www.mostlylucid.net)",
+      "Bash(docker build:*)",
+      "Bash(timeout 10 docker run:*)",
+      "Bash(timeout 30 docker run:*)",
+      "Bash(docker run:*)",
+      "Bash(timeout 20 docker run:*)",
+      "Bash(timeout 15 docker run:*)",
+      "Bash(timeout 25 docker run:*)",
+      "Bash(curl:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker logs:*)"
     ],
     "deny": [],
     "ask": []

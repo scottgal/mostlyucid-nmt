@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **BREAKING**: Updated base images to address vulnerabilities
-  - CPU images: `python:3.11-slim` → `python:3.13-slim`
+  - CPU images: `python:3.11-slim` → `python:3.12-slim` (3.13 has FastAPI compatibility issues)
   - GPU images: `nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04` → `nvidia/cuda:12.6.2-cudnn-runtime-ubuntu24.04`
   - PyTorch CUDA support: `cu121` → `cu124` (compatible with CUDA 12.6 runtime)
   - Ubuntu: 22.04 → 24.04 for GPU images
@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `--break-system-packages` flag to pip installs in GPU Dockerfiles for Ubuntu 24.04 compatibility (PEP 668)
 - Fixed OCI image titles: All Dockerfiles now use same `org.opencontainers.image.title="mostlylucid-nmt"` to ensure all images go to ONE Docker Hub repository with different tags (previously used hyphened names that could cause confusion)
 - **CRITICAL**: Fixed GitHub Actions CI/CD workflow to push all variants to ONE repository (`scottgal/mostlylucid-nmt`) with different tags (`:cpu`, `:cpu-min`, `:gpu`, `:gpu-min`) instead of creating separate repositories with hyphens (`mostlylucid-nmt-gpu`)
+- **CRITICAL**: Fixed gunicorn startup error - changed `--keepalive` to `--keep-alive` in all Dockerfiles (containers were failing to start with "unrecognized arguments: --keepalive")
+- **CRITICAL**: Fixed FastAPI/Pydantic compatibility issue - changed `Optional[List[str]]` to `List[str]` with empty default in Query parameters (worker was failing to boot with "Invalid args for response field")
 
 ### Changed
 - **Tag structure updated**: All images now use clearer tag names

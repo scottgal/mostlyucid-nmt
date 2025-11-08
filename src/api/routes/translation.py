@@ -85,14 +85,14 @@ async def translate_get(
     request: Request,
     translation_service: TranslationService,
     target_lang: str = Query(..., alias="target_lang"),
-    text: Optional[List[str]] = Query(default=None, alias="text"),
+    text: List[str] = Query(default=[], alias="text"),
     source_lang: str = Query(default="", alias="source_lang"),
     beam_size: int = Query(default=5, alias="beam_size"),
     perform_sentence_splitting: bool = Query(default=True, alias="perform_sentence_splitting"),
 ):
     """GET endpoint for translation."""
     req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-    base_texts = _normalize_texts(text or [])
+    base_texts = _normalize_texts(text)
 
     if perform_sentence_splitting is None:
         perform_sentence_splitting = config.PERFORM_SENTENCE_SPLITTING_DEFAULT
