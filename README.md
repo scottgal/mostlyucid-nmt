@@ -1,19 +1,131 @@
 ﻿# Marian Translator (EasyNMT-compatible API)
 
-A FastAPI service that provides an EasyNMT-like HTTP API for machine translation using Helsinki-NLP MarianMT models from Hugging Face.
+[![Docker Pulls](https://img.shields.io/docker/pulls/scottgal/mostlylucid-nmt)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![latest](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/latest)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![gpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![gpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 
+A FastAPI service that provides an EasyNMT-like HTTP API for machine translation supporting multiple model families:
+- **Opus-MT** (Helsinki-NLP): 1200+ translation pairs for 150+ languages
+- **mBART50** (Facebook): All-to-all translation for 50 languages
+- **M2M100** (Facebook): All-to-all translation for 100 languages
+
+Features:
 - Compatible endpoints with EasyNMT: `/translate` (GET/POST), `/lang_pairs`, `/get_languages`, `/language_detection` (GET/POST), `/model_name`
+- New discovery endpoints to find available models dynamically
 - Swagger UI available at `/docs` (also at `/` via redirect) and ReDoc at `/redoc`
 - CPU and GPU support (CUDA), with on-demand model loading and LRU in-memory cache
+- Minimal Docker images with volume-mapped model caching
 - Backpressure and queuing on by default; smart `Retry-After` on overload
 - Robust input handling, sentence splitting, and optional pivot translation
 - Structured logging with optional file rotation for long-running stability
 
 
+## 🚀 Latest Updates - v2.0
+
+### 1. Multiple Model Families - BIGGEST UPDATE!
+**Switch between three powerful translation model families:**
+
+| Family | Languages | Pairs | Model Type | Quality | Use Case |
+|--------|-----------|-------|------------|---------|----------|
+| **Opus-MT** | 150+ | 1200+ | Separate per direction | ⭐⭐⭐⭐⭐ Best | High-quality production |
+| **mBART50** | 50 | 2,450 | Single multilingual | ⭐⭐⭐⭐ Good | Space-constrained, many pairs |
+| **M2M100** | 100 | 9,900 | Single multilingual | ⭐⭐⭐⭐ Good | Maximum language coverage |
+
+**Switch via environment variable:**
+```bash
+MODEL_FAMILY=opus-mt   # Default, best quality
+MODEL_FAMILY=mbart50   # 50 languages, single model
+MODEL_FAMILY=m2m100    # 100 languages, broadest coverage
+```
+
+### 2. Automatic Model Family Fallback - NEW!
+**Intelligently selects the best available model for any translation:**
+
+- Primary family tries first (e.g., Opus-MT for quality)
+- Automatically falls back to mBART50 or M2M100 if pair not available
+- **Maximum coverage without sacrificing quality!**
+- Configurable priority order
+
+```bash
+# Enable auto-fallback (default: ON)
+AUTO_MODEL_FALLBACK=1
+MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"
+```
+
+**Example:** Request Ukrainian→French:
+1. Try Opus-MT (not available)
+2. Auto-fallback to mBART50 ✓ (succeeds!)
+3. Translation completes with best available model
+
+### 3. Model Discovery Endpoints - NEW!
+**Dynamically discover available models from Hugging Face:**
+
+- `GET /discover/opus-mt` - All 1200+ Opus-MT pairs (cached 1 hour)
+- `GET /discover/mbart50` - All 2,450 mBART50 pairs
+- `GET /discover/m2m100` - All 9,900 M2M100 pairs
+- `GET /discover/all` - All families in parallel
+- `POST /discover/clear-cache` - Clear discovery cache
+
+### 4. Minimal Docker Images - NEW!
+**Smaller images with volume-mapped model caching:**
+
+| Image | Size | Models | Best For |
+|-------|------|--------|----------|
+| `scottgal/mostlylucid-nmt:latest` | ~2.5GB | Preloaded | Production CPU |
+| `scottgal/mostlylucid-nmt:min` | ~1.5GB | None (on-demand) | Flexible CPU deployment |
+| `scottgal/mostlylucid-nmt:gpu` | ~5GB | Preloaded | Production GPU |
+| `scottgal/mostlylucid-nmt:gpu-min` | ~4GB | None (on-demand) | Flexible GPU deployment |
+
+**Benefits:**
+- ✅ Smaller image sizes
+- ✅ Models persist across container restarts (volume mapping)
+- ✅ Switch model families without rebuilding
+- ✅ Shared cache between containers
+
+### 5. All Images in One Repository!
+**Single Docker Hub repository with multiple tags:**
+
+```bash
+# All from: scottgal/mostlylucid-nmt
+docker pull scottgal/mostlylucid-nmt:latest    # CPU
+docker pull scottgal/mostlylucid-nmt:min       # CPU minimal
+docker pull scottgal/mostlylucid-nmt:gpu       # GPU
+docker pull scottgal/mostlylucid-nmt:gpu-min   # GPU minimal
+```
+
+### 6. Volume-Mapped Model Cache - NEW!
+**Persistent model storage across containers:**
+
+```bash
+# Linux/Mac
+docker run -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_CACHE_DIR=/models \
+  scottgal/mostlylucid-nmt:min
+
+# Windows PowerShell
+docker run -p 8000:8000 `
+  -v ${HOME}/model-cache:/models `
+  -e MODEL_CACHE_DIR=/models `
+  scottgal/mostlylucid-nmt:min
+
+# Windows CMD
+docker run -p 8000:8000 ^
+  -v %USERPROFILE%/model-cache:/models ^
+  -e MODEL_CACHE_DIR=/models ^
+  scottgal/mostlylucid-nmt:min
+```
+
+---
+
 ## Table of Contents
 - [Quick Start](#quick-start)
-  - [CPU](#cpu)
-  - [GPU](#gpu)
+  - [Using Pre-built Images (Docker Hub)](#using-pre-built-images-docker-hub)
+  - [CPU (Build from Source)](#cpu-build-from-source)
+  - [GPU (Build from Source)](#gpu-build-from-source)
+  - [Minimal Images (with volume-mapped cache)](#minimal-images-with-volume-mapped-cache)
 - [API](#api)
   - [`/translate` GET](#translate-get)
   - [`/translate` POST](#translate-post)
@@ -21,6 +133,7 @@ A FastAPI service that provides an EasyNMT-like HTTP API for machine translation
   - [`/get_languages`](#get_languages)
   - [`/language_detection` GET/POST](#language_detection)
   - [`/model_name`](#model_name)
+  - [Model Discovery](#model-discovery)
   - [Health/Observability](#healthobservability)
 - [Configuration (Environment Variables)](#configuration-environment-variables)
   - [Device Selection](#device-selection)
@@ -43,7 +156,52 @@ A FastAPI service that provides an EasyNMT-like HTTP API for machine translation
 
 ## Quick Start
 
-### CPU
+### Using Pre-built Images (Docker Hub)
+
+The easiest way to get started is using pre-built images from Docker Hub.
+
+#### CPU (Docker Hub)
+```bash
+# Pull and run
+docker run -p 8000:8000 \
+  -e MODEL_FAMILY=opus-mt \
+  -e ENABLE_QUEUE=1 \
+  scottgal/mostlylucid-nmt
+
+# Or use mBART50 with volume-mapped cache
+docker run -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_FAMILY=mbart50 \
+  -e MODEL_CACHE_DIR=/models \
+  scottgal/mostlylucid-nmt:min
+```
+
+#### GPU (Docker Hub)
+Requires NVIDIA Container Toolkit.
+
+```bash
+# Pull and run with Opus-MT
+docker run --gpus all -p 8000:8000 \
+  -e USE_GPU=true \
+  -e PRELOAD_MODELS="en->de,de->en" \
+  -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+  scottgal/mostlylucid-nmt:gpu
+
+# Or use M2M100 with volume-mapped cache
+docker run --gpus all -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=m2m100 \
+  -e MODEL_CACHE_DIR=/models \
+  -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+  scottgal/mostlylucid-nmt:gpu-min
+```
+
+Open the docs at: http://localhost:8000/
+
+---
+
+### CPU (Build from Source)
 Build and run the CPU image:
 
 ```bash
@@ -61,7 +219,7 @@ docker run -p 8000:8000 \
 Open the docs at: http://localhost:8000/
 
 
-### GPU
+### GPU (Build from Source)
 Requires NVIDIA Container Toolkit.
 
 ```bash
@@ -79,6 +237,104 @@ docker run --gpus all -p 8000:8000 \
 ```
 
 Open the docs at: http://localhost:8000/
+
+
+### Minimal Images (with volume-mapped cache)
+
+Minimal images don't preload any models but download them on-demand and cache to a volume-mapped directory. This keeps container size small and allows model persistence across container restarts.
+
+#### CPU Minimal
+```bash
+# Build
+docker build -f Dockerfile.min -t mostlylucid-nmt:min .
+
+# Run with volume mapping for model cache
+docker run -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_FAMILY=opus-mt \
+  -e MODEL_CACHE_DIR=/models \
+  scottgal/mostlylucid-nmt:min
+```
+
+#### GPU Minimal
+```bash
+# Build
+docker build -f Dockerfile.gpu.min -t mostlylucid-nmt:gpu-min .
+
+# Run with volume mapping and GPU
+docker run --gpus all -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=mbart50 \
+  -e MODEL_CACHE_DIR=/models \
+  -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+  scottgal/mostlylucid-nmt:gpu-min
+```
+
+Benefits:
+- **Smaller images**: No preloaded models embedded in image
+- **Flexible model selection**: Switch model families without rebuilding
+- **Persistent cache**: Models persist across container restarts
+- **On-demand loading**: Models download automatically when first requested
+
+---
+
+### Model Family Examples
+
+#### Opus-MT (1200+ pairs, best quality)
+```bash
+# CPU with pre-built image
+docker run -p 8000:8000 \
+  -e MODEL_FAMILY=opus-mt \
+  scottgal/mostlylucid-nmt
+
+# GPU with pre-built image
+docker run --gpus all -p 8000:8000 \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=opus-mt \
+  -e PRELOAD_MODELS="en->de,de->en,fr->en" \
+  scottgal/mostlylucid-nmt:gpu
+```
+
+#### mBART50 (50 languages, single model)
+```bash
+# Minimal image with volume cache (recommended)
+docker run -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_FAMILY=mbart50 \
+  -e MODEL_CACHE_DIR=/models \
+  scottgal/mostlylucid-nmt:min
+
+# GPU with FP16
+docker run --gpus all -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=mbart50 \
+  -e MODEL_CACHE_DIR=/models \
+  -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+  scottgal/mostlylucid-nmt:gpu-min
+```
+
+#### M2M100 (100 languages, broadest coverage)
+```bash
+# Minimal image with volume cache (recommended)
+docker run -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_FAMILY=m2m100 \
+  -e MODEL_CACHE_DIR=/models \
+  scottgal/mostlylucid-nmt:min
+
+# GPU with FP16
+docker run --gpus all -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=m2m100 \
+  -e MODEL_CACHE_DIR=/models \
+  -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+  scottgal/mostlylucid-nmt:gpu-min
+```
+
+**Tip:** Use minimal images (`-min` tag) with volume-mapped cache for mBART50/M2M100 since they're single large models. This avoids embedding them in the image and allows sharing across containers.
 
 
 ## API
@@ -163,6 +419,74 @@ Returns model/device info and key runtime configuration snapshot.
 }
 ```
 
+### Model Discovery
+
+Endpoints to discover available translation models dynamically.
+
+#### `/discover/opus-mt`
+Discovers all available Opus-MT language pairs from Hugging Face. Results are cached for 1 hour.
+
+Query params:
+- `force_refresh` (bool, optional): Bypass cache and fetch fresh data
+
+Response:
+```json
+{
+  "model_family": "opus-mt",
+  "language_pairs": [["en", "de"], ["de", "en"], ...],
+  "pair_count": 1234
+}
+```
+
+#### `/discover/mbart50`
+Returns all available mBART50 language pairs (all-to-all for 50 languages).
+
+Response:
+```json
+{
+  "model_family": "mbart50",
+  "language_pairs": [["en", "de"], ["de", "en"], ...],
+  "pair_count": 2450
+}
+```
+
+#### `/discover/m2m100`
+Returns all available M2M100 language pairs (all-to-all for 100 languages).
+
+Response:
+```json
+{
+  "model_family": "m2m100",
+  "language_pairs": [["en", "de"], ["de", "en"], ...],
+  "pair_count": 9900
+}
+```
+
+#### `/discover/all`
+Discovers all available language pairs for all model families.
+
+Query params:
+- `force_refresh` (bool, optional): Force refresh Opus-MT from HuggingFace
+
+Response:
+```json
+{
+  "models": {
+    "opus-mt": {"language_pairs": [...], "pair_count": 1234},
+    "mbart50": {"language_pairs": [...], "pair_count": 2450},
+    "m2m100": {"language_pairs": [...], "pair_count": 9900}
+  }
+}
+```
+
+#### `POST /discover/clear-cache`
+Clears the model discovery cache.
+
+Response:
+```json
+{"status": "ok", "message": "Discovery cache cleared"}
+```
+
 ### Health/Observability
 - `GET /healthz` → `{ "status": "ok" }`
 - `GET /readyz` → readiness with device and queue settings
@@ -177,9 +501,18 @@ Defaults are shown in parentheses.
 - `DEVICE` = `auto|cpu|cuda|cuda:0` (`auto`) — explicit device overrides `USE_GPU`.
 
 ### Model & Cache
-- `EASYNMT_MODEL` = `opus-mt` (`opus-mt`) — model family selector (only opus-mt supported).
-- `EASYNMT_MODEL_ARGS` = JSON string (`{}`) — forwarded to `transformers.pipeline` (allowed keys: `revision`, `trust_remote_code`, `cache_dir`, `use_fast`, `torch_dtype` where `"fp16"|"bf16"|"fp32"`).
+- `MODEL_FAMILY` = `opus-mt|mbart50|m2m100` (`opus-mt`) — selects which model family to use for translation.
+  - `opus-mt`: Helsinki-NLP MarianMT models (1200+ pairs, separate model per direction)
+  - `mbart50`: Facebook mBART-50 (50 languages, all-to-all, single multilingual model)
+  - `m2m100`: Facebook M2M-100 (100 languages, all-to-all, single multilingual model)
+- `AUTO_MODEL_FALLBACK` = `1|0` (`1`) — automatically try other model families if pair not available in primary family. Maximizes coverage while prioritizing quality.
+- `MODEL_FALLBACK_ORDER` = string (`opus-mt,mbart50,m2m100`) — comma-separated priority order for auto-fallback. First available family wins.
+- `MODEL_CACHE_DIR` = path (unset) — directory to cache downloaded models (useful with Docker volumes).
+- `EASYNMT_MODEL` = `opus-mt` (`opus-mt`) — legacy compatibility, prefer `MODEL_FAMILY`.
+- `EASYNMT_MODEL_ARGS` = JSON string (`{}`) — forwarded to `transformers.pipeline` (allowed keys: `revision`, `trust_remote_code`, `cache_dir`, `use_fast`, `torch_dtype` where `"fp16"|"bf16"|"fp32"`). If `MODEL_CACHE_DIR` is set, `cache_dir` is automatically added.
 - `MAX_CACHED_MODELS` = int (`6`) — LRU capacity of in-memory pipelines. Eviction frees VRAM when on GPU.
+
+**Auto-fallback example:** If `MODEL_FAMILY=opus-mt` but you request Ukrainian→French (not available in Opus-MT), the system automatically tries mBART50 or M2M100 based on `MODEL_FALLBACK_ORDER`. This ensures maximum language pair coverage while prioritizing quality.
 
 ### Preloading
 - `PRELOAD_MODELS` = `"en->de,de->en,fr->en"` — preloads pipelines at startup; invalid or missing repos are ignored.
@@ -310,9 +643,16 @@ Notes:
 - 503 Busy:
   - Queueing disabled or all slots occupied. Respect `Retry-After`; consider enabling queueing (`ENABLE_QUEUE=1`).
 - Missing language pair:
-  - The service dynamically loads `Helsinki-NLP/opus-mt-{src}-{tgt}`. If it doesn’t exist, direct translation fails; pivot fallback (`PIVOT_FALLBACK=1`) may help.
+  - **Opus-MT**: The service dynamically loads `Helsinki-NLP/opus-mt-{src}-{tgt}`. Use `/discover/opus-mt` to see all available pairs. If a direct pair doesn't exist, pivot fallback (`PIVOT_FALLBACK=1`) may help.
+  - **mBART50/M2M100**: These support all-to-all translation for their language sets. Check supported languages via `/get_languages`.
+- Model family selection:
+  - Use `MODEL_FAMILY` env var to switch between `opus-mt`, `mbart50`, or `m2m100`. Each has different language support and model sizes.
+  - Discovery endpoints (`/discover/*`) help identify which pairs are available for each family.
 - Long texts fail:
   - Sentence splitting and chunking are enabled by default; adjust `MAX_SENTENCE_CHARS` / `MAX_CHUNK_CHARS` or lower `beam_size`.
+- Model caching with Docker volumes:
+  - Set `MODEL_CACHE_DIR=/models` and mount a volume: `-v ./model-cache:/models`
+  - Models persist across container restarts and are shared if multiple containers use the same volume.
 - Logs and persistence:
   - Enable file logs with rotation (`LOG_TO_FILE=1`). Mount a volume at `/var/log/marian-translator` if you need persistence.
 - `sacremoses` warning:

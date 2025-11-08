@@ -27,9 +27,10 @@ router = APIRouter()
 )
 async def lang_pairs():
     """Get all supported language pairs."""
+    supported_langs = config.get_supported_langs()
     pairs = []
-    for src in config.SUPPORTED_LANGS:
-        for tgt in config.SUPPORTED_LANGS:
+    for src in supported_langs:
+        for tgt in supported_langs:
             if src != tgt:
                 pairs.append([src, tgt])
     return LanguagePairsResponse(language_pairs=pairs)
@@ -50,14 +51,15 @@ async def get_languages(
     target_lang: Optional[str] = None
 ):
     """Get supported languages with optional filtering."""
-    if source_lang and source_lang in config.SUPPORTED_LANGS:
+    supported_langs = config.get_supported_langs()
+    if source_lang and source_lang in supported_langs:
         # Return targets for this source
-        languages = [l for l in config.SUPPORTED_LANGS if l != source_lang]
-    elif target_lang and target_lang in config.SUPPORTED_LANGS:
+        languages = [l for l in supported_langs if l != source_lang]
+    elif target_lang and target_lang in supported_langs:
         # Return sources for this target
-        languages = [l for l in config.SUPPORTED_LANGS if l != target_lang]
+        languages = [l for l in supported_langs if l != target_lang]
     else:
-        languages = config.SUPPORTED_LANGS
+        languages = supported_langs
 
     return LanguagesResponse(languages=languages)
 

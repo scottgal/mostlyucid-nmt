@@ -47,7 +47,8 @@ def _validate_language_pair(src: str, tgt: str) -> None:
     Raises:
         UnsupportedLanguagePairError: If pair is invalid
     """
-    if src not in config.SUPPORTED_LANGS or tgt not in config.SUPPORTED_LANGS or src == tgt:
+    supported_langs = config.get_supported_langs()
+    if src not in supported_langs or tgt not in supported_langs or src == tgt:
         raise UnsupportedLanguagePairError(src, tgt)
 
 

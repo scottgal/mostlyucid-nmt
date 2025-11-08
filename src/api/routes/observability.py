@@ -80,8 +80,14 @@ async def cache_status():
 )
 async def model_name():
     """Model info endpoint."""
+    model_family_name = {
+        "opus-mt": "Helsinki-NLP/opus-mt (dynamic)",
+        "mbart50": "facebook/mbart-large-50-many-to-many-mmt",
+        "m2m100": "facebook/m2m100_418M"
+    }.get(config.MODEL_FAMILY, config.MODEL_FAMILY)
+
     return ModelInfoResponse(
-        model_name="Helsinki-NLP/opus-mt (dynamic)",
+        model_name=model_family_name,
         device=device_manager.device_str,
         easynmt_model=config.EASYNMT_MODEL,
         batch_size=config.EASYNMT_BATCH_SIZE,

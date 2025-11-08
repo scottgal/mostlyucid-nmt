@@ -1,0 +1,42 @@
+# Dockerfile.min - Minimal CPU image with no preloaded models
+# Build: docker build -f Dockerfile.min -t mostlylucid-nmt:min .
+# Run with volume mapping for model cache:
+#   docker run -p 8000:8000 -v /path/to/model-cache:/models mostlylucid-nmt:min
+FROM python:3.11-slim
+
+# Prevent interactive prompts and reduce image size
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# System deps for performance (optional) and SSL
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY src/ ./src/
+COPY app.py .
+
+# Create directory for model cache (can be mounted as volume)
+RUN mkdir -p /models
+
+# Set default model cache directory
+ENV MODEL_CACHE_DIR=/models
+
+# Don't preload any models by default (override with PRELOAD_MODELS env var)
+ENV PRELOAD_MODELS=""
+
+EXPOSE 8000
+
+# Ensure fast, graceful shutdown: send SIGTERM and let Gunicorn handle it
+STOPSIGNAL SIGTERM
+
+# Use exec so Gunicorn becomes PID 1 and receives signals directly; add graceful timeout
+CMD ["/bin/sh", "-lc", "exec gunicorn -k uvicorn.workers.UvicornWorker -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:8000 --timeout ${TIMEOUT:-60} --graceful-timeout ${GRACEFUL_TIMEOUT:-20} --keepalive ${KEEP_ALIVE:-5} app:app"]

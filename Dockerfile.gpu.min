@@ -1,8 +1,8 @@
-﻿# Dockerfile.gpu — GPU-enabled image using CUDA runtime
+# Dockerfile.gpu.min — Minimal GPU-enabled image with no preloaded models
 # Build example:
-#   docker build -f Dockerfile.gpu -t mostlylucid-nmt:gpu .
+#   docker build -f Dockerfile.gpu.min -t mostlylucid-nmt:gpu-min .
 # Run example (requires NVIDIA Container Toolkit):
-#   docker run --gpus all -e USE_GPU=true -e PRELOAD_MODELS="en->de,de->en" -p 24080:8000 mostlylucid-nmt:gpu
+#   docker run --gpus all -e USE_GPU=true -v /path/to/model-cache:/models -p 8000:8000 mostlylucid-nmt:gpu-min
 
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-venv \
         build-essential \
         libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*Ca
 
 WORKDIR /app
 
@@ -31,16 +31,27 @@ RUN pip3 install -r requirements.txt
 # See https://pytorch.org for the latest index URL mapping
 RUN pip3 install --upgrade --index-url https://download.pytorch.org/whl/cu121 torch
 
+# Copy source code
 COPY src/ ./src/
 COPY app.py ./
 
-EXPOSE 8000
+# Create directory for model cache (can be mounted as volume)
+RUN mkdir -p /models
+
+# Set default model cache directory
+ENV MODEL_CACHE_DIR=/models
+
+# Don't preload any models by default (override with PRELOAD_MODELS env var)
+ENV PRELOAD_MODELS=""
 
 # Common runtime envs:
 # - USE_GPU=true|false|auto (default auto)
 # - DEVICE=auto|cpu|cuda|cuda:0 (overrides USE_GPU when set)
 # - PRELOAD_MODELS="en->de,de->en,fr->en" (preload at startup)
 # - MAX_CACHED_MODELS=6 (LRU capacity)
+# - MODEL_FAMILY=opus-mt|mbart50|m2m100 (default opus-mt)
+
+EXPOSE 8000
 
 # Ensure fast, graceful shutdown inside the container
 STOPSIGNAL SIGTERM

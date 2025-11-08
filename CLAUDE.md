@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MostlyLucid-NMT is a production-ready FastAPI service providing an EasyNMT-compatible HTTP API for machine translation using Helsinki-NLP MarianMT models from Hugging Face. The codebase has been completely refactored into a modular, tested, and maintainable structure.
+MostlyLucid-NMT is a production-ready FastAPI service providing an EasyNMT-compatible HTTP API for machine translation. It supports multiple model families:
+- **Opus-MT** (Helsinki-NLP): 1200+ translation pairs for 150+ languages
+- **mBART50** (Facebook): All-to-all translation for 50 languages
+- **M2M100** (Facebook): All-to-all translation for 100 languages
+
+The codebase has been completely refactored into a modular, tested, and maintainable structure.
 
 ## Code Architecture
 
@@ -23,7 +28,8 @@ marian-translator/
 │   │   ├── cache.py            # LRU pipeline cache with GPU memory management
 │   │   └── device.py           # Device selection and management
 │   ├── services/               # Business logic layer
-│   │   ├── model_manager.py    # Model loading and caching
+│   │   ├── model_manager.py    # Model loading and caching (supports opus-mt, mbart50, m2m100)
+│   │   ├── model_discovery.py  # Discovers available models from Hugging Face
 │   │   ├── translation_service.py  # Translation pipeline
 │   │   ├── language_detection.py   # Language detection
 │   │   └── queue_manager.py    # Request queueing and backpressure
@@ -34,6 +40,7 @@ marian-translator/
 │       └── routes/             # Route modules
 │           ├── translation.py  # Translation endpoints
 │           ├── language.py     # Language detection endpoints
+│           ├── discovery.py    # Model discovery endpoints
 │           └── observability.py # Health, cache, metrics endpoints
 ├── tests/                      # Comprehensive test suite
 │   ├── conftest.py             # Pytest fixtures and configuration
@@ -48,6 +55,8 @@ marian-translator/
 ├── pytest.ini                  # Pytest configuration
 ├── Dockerfile                  # CPU build
 ├── Dockerfile.gpu              # GPU build with CUDA 12.1
+├── Dockerfile.min              # Minimal CPU build (no preloaded models)
+├── Dockerfile.gpu.min          # Minimal GPU build (no preloaded models)
 └── README.md                   # User documentation
 ```
 
@@ -104,13 +113,45 @@ Return translations
 
 ## Key Modules
 
+### Model Discovery Service (src/services/model_discovery.py)
+
+**ModelDiscoveryService** dynamically discovers available translation models:
+- **discover_opus_mt_pairs()**: Queries Hugging Face API for all `Helsinki-NLP/opus-mt-*` models
+- **discover_mbart50_pairs()**: Returns all-to-all pairs for 50 mBART50 languages
+- **discover_m2m100_pairs()**: Returns all-to-all pairs for 100 M2M100 languages
+- **discover_all_pairs()**: Fetches all families in parallel
+- Results are cached for 1 hour to avoid repeated API calls
+- Exposed via `/discover/*` endpoints in src/api/routes/discovery.py
+
+Usage:
+```python
+from src.services.model_discovery import model_discovery_service
+
+# Discover Opus-MT pairs (cached)
+pairs = await model_discovery_service.discover_opus_mt_pairs()
+
+# Force refresh
+pairs = await model_discovery_service.discover_opus_mt_pairs(force_refresh=True)
+
+# Clear cache
+model_discovery_service.clear_cache()
+```
+
 ### Configuration (src/config.py)
 
 **Config class** centralizes all environment variables:
 - Type-safe parsing (int, float, bool)
-- `parse_model_args()`: Converts JSON to torch dtypes
+- `get_supported_langs()`: Returns language codes for current `MODEL_FAMILY`
+- `parse_model_args()`: Converts JSON to torch dtypes, auto-adds `cache_dir` if `MODEL_CACHE_DIR` is set
 - `resolve_device_index()`: Priority: DEVICE → USE_GPU → auto
 - `get_max_inflight_translations()`: Auto-configures based on device
+
+New configuration options:
+- `MODEL_FAMILY`: `opus-mt|mbart50|m2m100` (default: `opus-mt`)
+- `MODEL_CACHE_DIR`: Path for volume-mapped model caching (optional)
+- `SUPPORTED_LANGS`: Language codes for Opus-MT (13 languages)
+- `MBART50_LANGS`: Language codes for mBART50 (50 languages)
+- `M2M100_LANGS`: Language codes for M2M100 (100 languages)
 
 ### Exception Handling (src/exceptions.py)
 
@@ -173,18 +214,29 @@ gunicorn -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:8000 app:app
 ### Docker Builds
 
 ```bash
-# CPU build
-docker build -t mostlylucid-nmt .
+# Standard builds (with source code)
+docker build -t mostlylucid-nmt .                          # CPU
+docker build -f Dockerfile.gpu -t mostlylucid-nmt:gpu .   # GPU
 
-# GPU build
-docker build -f Dockerfile.gpu -t mostlylucid-nmt:gpu .
+# Minimal builds (no preloaded models, for volume mapping)
+docker build -f Dockerfile.min -t mostlylucid-nmt:min .         # CPU minimal
+docker build -f Dockerfile.gpu.min -t mostlylucid-nmt:gpu-min . # GPU minimal
 
-# Run with environment variables
+# Run standard build
 docker run -p 8000:8000 \
   -e USE_GPU=true \
+  -e MODEL_FAMILY=opus-mt \
   -e PRELOAD_MODELS="en->de,de->en" \
   -e EASYNMT_BATCH_SIZE=64 \
   mostlylucid-nmt:gpu
+
+# Run minimal build with volume-mapped cache
+docker run --gpus all -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=mbart50 \
+  -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+  mostlylucid-nmt:gpu-min
 ```
 
 ### Testing API
@@ -203,6 +255,13 @@ curl http://localhost:8000/model_name
 
 # Language pairs
 curl http://localhost:8000/lang_pairs
+
+# Model discovery
+curl http://localhost:8000/discover/opus-mt
+curl http://localhost:8000/discover/mbart50
+curl http://localhost:8000/discover/m2m100
+curl http://localhost:8000/discover/all
+curl -X POST http://localhost:8000/discover/clear-cache
 ```
 
 ## Testing Strategy
@@ -234,11 +293,33 @@ def mock_model_manager(monkeypatch, mock_pipeline):
 
 ## Code Patterns
 
-### Adding New Language
+### Switching Model Families
 
-1. Add to `Config.SUPPORTED_LANGS` (src/config.py:18)
-2. Ensure `Helsinki-NLP/opus-mt-{src}-{tgt}` exists on Hugging Face
-3. Add to `PRELOAD_MODELS` env var (optional)
+Set the `MODEL_FAMILY` environment variable to switch between model families:
+
+```bash
+# Opus-MT (default) - 1200+ pairs, separate models
+MODEL_FAMILY=opus-mt
+
+# mBART50 - 50 languages, single multilingual model
+MODEL_FAMILY=mbart50
+
+# M2M100 - 100 languages, single multilingual model
+MODEL_FAMILY=m2m100
+```
+
+Each family has different characteristics:
+- **Opus-MT**: Best for high-quality pairs, separate model per direction, larger combined size
+- **mBART50**: Smaller footprint (single model), good for 50 major languages
+- **M2M100**: Largest language coverage (100), single model, moderate quality
+
+### Adding New Language (Opus-MT only)
+
+1. Check if `Helsinki-NLP/opus-mt-{src}-{tgt}` exists on Hugging Face (use `/discover/opus-mt` endpoint)
+2. If it exists, it will be loaded automatically on first request
+3. Optionally add to `PRELOAD_MODELS` env var to load at startup
+
+For mBART50/M2M100, all supported languages are already available (see `MBART50_LANGS` and `M2M100_LANGS` in config.py)
 
 ### Adding New Endpoint
 
@@ -275,6 +356,27 @@ async def custom_endpoint(translation_service: TranslationService):
 2. Raise in service layer
 3. Catch in API layer, map to HTTP status code
 4. Add test case
+
+### Model Loading Architecture
+
+**ModelManager** (src/services/model_manager.py) handles all three model families:
+
+```python
+def _get_model_name_and_langs(self, src: str, tgt: str) -> tuple[str, str, str]:
+    """Returns (model_name, src_lang_code, tgt_lang_code) based on MODEL_FAMILY."""
+    if config.MODEL_FAMILY == "mbart50":
+        return ("facebook/mbart-large-50-many-to-many-mmt", f"{src}_XX", f"{tgt}_XX")
+    elif config.MODEL_FAMILY == "m2m100":
+        return ("facebook/m2m100_418M", src, tgt)
+    else:  # opus-mt
+        return (f"Helsinki-NLP/opus-mt-{src}-{tgt}", src, tgt)
+```
+
+Key differences:
+- **Opus-MT**: Separate model per pair, loaded on-demand from `Helsinki-NLP/opus-mt-{src}-{tgt}`
+- **mBART50/M2M100**: Single multilingual model cached once, reused for all pairs
+- mBART50 requires language codes with `_XX` suffix
+- Pipeline creation includes `src_lang` and `tgt_lang` for multilingual models
 
 ### Modifying Translation Pipeline
 
@@ -387,14 +489,23 @@ Common issues:
 
 Critical for production:
 ```bash
+# Model selection
+MODEL_FAMILY=opus-mt  # or mbart50, m2m100
+MODEL_CACHE_DIR=/models  # for Docker volume mapping
+
+# Device and performance
 USE_GPU=true
 DEVICE=cuda:0
 EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}'
 PRELOAD_MODELS="en->de,de->en,en->fr,fr->en"
+
+# Queue and timeouts
 ENABLE_QUEUE=1
 MAX_QUEUE_SIZE=2000
 TIMEOUT=180
 GRACEFUL_TIMEOUT=30
+
+# Logging
 LOG_FORMAT=json
 LOG_TO_FILE=1
 ```

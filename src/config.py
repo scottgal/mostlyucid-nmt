@@ -13,9 +13,32 @@ class Config:
     VERSION = "1.0.0"
     TITLE = "Marian Translator API"
 
-    # Supported language codes
+    # Supported language codes (Opus-MT)
     SUPPORTED_LANGS: List[str] = [
         "en", "es", "fr", "de", "it", "zh", "nl", "hi", "ar", "uk", "fi", "sv", "el",
+    ]
+
+    # mBART50 language codes (50 languages)
+    MBART50_LANGS: List[str] = [
+        "ar", "cs", "de", "en", "es", "et", "fi", "fr", "gu", "hi",
+        "it", "ja", "kk", "ko", "lt", "lv", "my", "ne", "nl", "ro",
+        "ru", "si", "tr", "vi", "zh", "af", "az", "bn", "fa", "he",
+        "hr", "id", "ka", "km", "mk", "ml", "mn", "mr", "pl", "ps",
+        "pt", "sv", "sw", "ta", "te", "th", "tl", "uk", "ur", "xh",
+    ]
+
+    # M2M100 language codes (100 languages)
+    M2M100_LANGS: List[str] = [
+        "af", "am", "ar", "ast", "az", "ba", "be", "bg", "bn", "br",
+        "bs", "ca", "ceb", "cs", "cy", "da", "de", "el", "en", "es",
+        "et", "fa", "ff", "fi", "fr", "fy", "ga", "gd", "gl", "gu",
+        "ha", "he", "hi", "hr", "ht", "hu", "hy", "id", "ig", "ilo",
+        "is", "it", "ja", "jv", "ka", "kk", "km", "kn", "ko", "lb",
+        "lg", "ln", "lo", "lt", "lv", "mg", "mk", "ml", "mn", "mr",
+        "ms", "my", "ne", "nl", "no", "ns", "oc", "or", "pa", "pl",
+        "ps", "pt", "ro", "ru", "sd", "si", "sk", "sl", "so", "sq",
+        "sr", "ss", "su", "sv", "sw", "ta", "te", "th", "tl", "tn",
+        "tr", "uk", "ur", "uz", "vi", "wo", "xh", "yi", "yo", "zh",
     ]
 
     # Logging
@@ -34,6 +57,7 @@ class Config:
 
     # Model configuration
     EASYNMT_MODEL: str = os.getenv("EASYNMT_MODEL", "opus-mt")
+    MODEL_FAMILY: str = os.getenv("MODEL_FAMILY", "opus-mt").lower()  # opus-mt, mbart50, m2m100
     EASYNMT_MODEL_ARGS_RAW: str = os.getenv("EASYNMT_MODEL_ARGS", "{}")
     EASYNMT_MAX_TEXT_LEN: Optional[str] = os.getenv("EASYNMT_MAX_TEXT_LEN")
     EASYNMT_MAX_TEXT_LEN_INT: Optional[int] = (
@@ -96,6 +120,30 @@ class Config:
     # Preloading
     PRELOAD_MODELS: str = os.getenv("PRELOAD_MODELS", "").strip()
 
+    # Model cache directory (for volume mapping in Docker)
+    MODEL_CACHE_DIR: Optional[str] = os.getenv("MODEL_CACHE_DIR", None)
+
+    # Auto-fallback to other model families if pair not available
+    AUTO_MODEL_FALLBACK: bool = os.getenv("AUTO_MODEL_FALLBACK", "1").lower() in ("1", "true", "yes")
+
+    # Priority order for model family fallback (comma-separated)
+    # Default: opus-mt first (best quality), then mbart50, then m2m100 (broadest coverage)
+    MODEL_FALLBACK_ORDER: str = os.getenv("MODEL_FALLBACK_ORDER", "opus-mt,mbart50,m2m100")
+
+    @classmethod
+    def get_supported_langs(cls) -> List[str]:
+        """Get supported language codes for current model family.
+
+        Returns:
+            List of supported language codes
+        """
+        if cls.MODEL_FAMILY == "mbart50":
+            return cls.MBART50_LANGS
+        elif cls.MODEL_FAMILY == "m2m100":
+            return cls.M2M100_LANGS
+        else:  # opus-mt
+            return cls.SUPPORTED_LANGS
+
     @classmethod
     def parse_model_args(cls) -> Dict[str, Any]:
         """Parse EASYNMT_MODEL_ARGS JSON string into allowed pipeline kwargs."""
@@ -126,6 +174,10 @@ class Config:
                 continue
 
             out[k] = v
+
+        # Add cache_dir if MODEL_CACHE_DIR is set (unless already specified)
+        if cls.MODEL_CACHE_DIR and "cache_dir" not in out:
+            out["cache_dir"] = cls.MODEL_CACHE_DIR
 
         return out
 

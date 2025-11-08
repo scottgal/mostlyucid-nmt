@@ -13,7 +13,7 @@ from src.core.logging import logger
 from src.core.device import device_manager
 from src.services.model_manager import model_manager
 from src.services.translation_service import TranslationService
-from src.api.routes import translation, language, observability
+from src.api.routes import translation, language, observability, discovery
 
 
 # Global executors and services
@@ -124,6 +124,7 @@ def get_frontend_executor() -> ThreadPoolExecutor:
 # Include routers
 app.include_router(observability.router, tags=["Observability"])
 app.include_router(language.router, tags=["Language"])
+app.include_router(discovery.router, tags=["Discovery"])
 
 
 # Include translation router with dependency injection
