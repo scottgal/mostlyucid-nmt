@@ -11,7 +11,13 @@
       "Bash(timeout 25 docker run:*)",
       "Bash(curl:*)",
       "Bash(docker stop:*)",
-      "Bash(docker logs:*)"
+      "Bash(docker logs:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python:*)",
+      "Bash(md5sum:*)",
+      "Bash(docker images:*)",
+      "Bash(xxd:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -Command \"Get-Command -Syntax { . .\\build-all.ps1 }\")"
     ],
     "deny": [],
     "ask": []

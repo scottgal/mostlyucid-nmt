@@ -10,7 +10,7 @@ Production-ready FastAPI service for neural machine translation with multiple mo
 
 ## Quick Links
 - [GitHub Repository](https://github.com/scottgal/mostlylucid-nmt)
-- [Full Documentation](https://github.com/scottgal/mostlylucid-nmt/blob/main/README.md)
+- [Full Documentation](https://www.mostlylucid.net/blog/mostlylucid-nmt-complete-guide)
 - [Docker Hub](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 
 ## Available Tags

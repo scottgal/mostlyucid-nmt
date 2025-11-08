@@ -5,7 +5,8 @@ import torch
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Query, Request
+from typing import List
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -14,7 +15,8 @@ from src.core.logging import logger
 from src.core.device import device_manager
 from src.services.model_manager import model_manager
 from src.services.translation_service import TranslationService
-from src.api.routes import translation, language, observability, discovery
+from src.models import TranslatePostBody, LanguageDetectionPostBody
+from src.api.routes import observability, discovery
 
 
 # Global executors and services
@@ -132,13 +134,7 @@ def get_frontend_executor() -> ThreadPoolExecutor:
 
 # Include routers
 app.include_router(observability.router, tags=["Observability"])
-app.include_router(language.router, tags=["Language"])
 app.include_router(discovery.router, tags=["Discovery"])
-
-
-# Include translation router with dependency injection
-# We need to manually inject dependencies for translation routes
-from src.api.routes.translation import router as translation_router
 
 
 @app.get(
@@ -156,12 +152,12 @@ from src.api.routes.translation import router as translation_router
     )
 )
 async def translate_get_endpoint(
-    request,
-    target_lang: str,
-    text: list = None,
-    source_lang: str = "",
-    beam_size: int = 5,
-    perform_sentence_splitting: bool = True,
+    request: Request,
+    target_lang: str = Query(...),
+    text: List[str] = Query(default=[]),
+    source_lang: str = Query(default=""),
+    beam_size: int = Query(default=5),
+    perform_sentence_splitting: bool = Query(default=True),
     translation_service: TranslationService = Depends(get_translation_service)
 ):
     """GET translation endpoint."""
@@ -178,8 +174,8 @@ async def translate_get_endpoint(
     description="Post method for translation\n:return:"
 )
 async def translate_post_endpoint(
-    request,
-    body,
+    request: Request,
+    body: TranslatePostBody,
     translation_service: TranslationService = Depends(get_translation_service)
 ):
     """POST translation endpoint."""
@@ -197,7 +193,7 @@ async def translate_post_endpoint(
     )
 )
 async def language_detection_get_endpoint(
-    text: str,
+    text: str = Query(...),
     frontend_executor: ThreadPoolExecutor = Depends(get_frontend_executor)
 ):
     """GET language detection endpoint."""
@@ -215,7 +211,7 @@ async def language_detection_get_endpoint(
     )
 )
 async def language_detection_post_endpoint(
-    body,
+    body: LanguageDetectionPostBody,
     frontend_executor: ThreadPoolExecutor = Depends(get_frontend_executor)
 ):
     """POST language detection endpoint."""
@@ -225,7 +221,7 @@ async def language_detection_post_endpoint(
 
 # Global exception handlers
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(

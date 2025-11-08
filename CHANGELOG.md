@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed OCI image titles: All Dockerfiles now use same `org.opencontainers.image.title="mostlylucid-nmt"` to ensure all images go to ONE Docker Hub repository with different tags (previously used hyphened names that could cause confusion)
 - **CRITICAL**: Fixed GitHub Actions CI/CD workflow to push all variants to ONE repository (`scottgal/mostlylucid-nmt`) with different tags (`:cpu`, `:cpu-min`, `:gpu`, `:gpu-min`) instead of creating separate repositories with hyphens (`mostlylucid-nmt-gpu`)
 - **CRITICAL**: Fixed gunicorn startup error - changed `--keepalive` to `--keep-alive` in all Dockerfiles (containers were failing to start with "unrecognized arguments: --keepalive")
-- **CRITICAL**: Fixed FastAPI/Pydantic compatibility issue - changed `Optional[List[str]]` to `List[str]` with empty default in Query parameters (worker was failing to boot with "Invalid args for response field")
+- **CRITICAL**: Fixed FastAPI/Pydantic compatibility issue - removed unused `translation` and `language` module imports from app.py (line 17) that were causing decorator registration to fail with "Invalid args for response field" error. The app.py file defines its own wrapper endpoints with proper dependency injection (lines 144-223), so these router imports were unnecessary and causing FastAPI 0.121.0 to fail validation on route parameters without Depends().
 
 ### Changed
 - **Tag structure updated**: All images now use clearer tag names
