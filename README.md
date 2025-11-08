@@ -105,19 +105,19 @@ docker pull scottgal/mostlylucid-nmt:gpu-min   # GPU minimal
 docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 
 # Windows PowerShell
 docker run -p 8000:8000 `
   -v ${HOME}/model-cache:/models `
   -e MODEL_CACHE_DIR=/models `
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 
 # Windows CMD
 docker run -p 8000:8000 ^
   -v %USERPROFILE%/model-cache:/models ^
   -e MODEL_CACHE_DIR=/models ^
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 ```
 
 ### 7. Updated Base Images - SECURITY!
@@ -187,7 +187,7 @@ docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=mbart50 \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 ```
 
 #### GPU (Docker Hub)
@@ -267,7 +267,7 @@ docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=opus-mt \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 ```
 
 #### GPU Minimal
@@ -317,7 +317,7 @@ docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=mbart50 \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 
 # GPU with FP16
 docker run --gpus all -p 8000:8000 \
@@ -336,7 +336,7 @@ docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=m2m100 \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 
 # GPU with FP16
 docker run --gpus all -p 8000:8000 \

@@ -78,7 +78,7 @@ docker run -d -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_CACHE_DIR=/models \
   -e MODEL_FAMILY=opus-mt \
-  scottgal/mostlylucid-nmt:min
+  scottgal/mostlylucid-nmt:cpu-min
 ```
 
 ### `gpu` - GPU Production Image
