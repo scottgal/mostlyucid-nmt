@@ -14,10 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - PyTorch CUDA support: `cu121` → `cu124` (compatible with CUDA 12.6 runtime)
   - Ubuntu: 22.04 → 24.04 for GPU images
 
+### Fixed
+- Added `--break-system-packages` flag to pip installs in GPU Dockerfiles for Ubuntu 24.04 compatibility (PEP 668)
+
 ### Changed
+- **Tag structure updated**: All images now use clearer tag names
+  - `cpu` (alias: `latest`) instead of just `latest`
+  - `cpu-min` instead of `min`
+  - Version tags now include variant prefix (e.g., `cpu-20250108.143022`)
 - Updated all OCI labels to reflect CUDA 12.6 in GPU images
 - Updated all documentation references from CUDA 12.1 to CUDA 12.6
 - PyTorch installation now uses CUDA 12.4 wheels (cu124 index)
+- All badges updated to show 4 variants: cpu, cpu-min, gpu, gpu-min
 
 ## [2.0.0] - 2025-01-08
 

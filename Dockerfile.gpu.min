@@ -42,11 +42,12 @@ WORKDIR /app
 COPY requirements.txt ./
 
 # Install Python deps from requirements first (will install CPU torch, then we upgrade to CUDA wheel)
-RUN pip3 install -r requirements.txt
+# Ubuntu 24.04 requires --break-system-packages for pip installs outside venv
+RUN pip3 install --break-system-packages -r requirements.txt
 
 # Install CUDA-enabled PyTorch matching CUDA 12.4 (compatible with CUDA 12.6 runtime)
 # See https://pytorch.org for the latest index URL mapping
-RUN pip3 install --upgrade --index-url https://download.pytorch.org/whl/cu124 torch
+RUN pip3 install --break-system-packages --upgrade --index-url https://download.pytorch.org/whl/cu124 torch
 
 # Copy source code
 COPY src/ ./src/
