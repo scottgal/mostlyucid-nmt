@@ -1,5 +1,11 @@
 # mostlylucid-nmt Docker Images
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/scottgal/mostlylucid-nmt)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![cpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu?label=cpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![cpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu-min?label=cpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![gpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu?label=gpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![gpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu-min?label=gpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+
 Production-ready FastAPI service for neural machine translation with multiple model family support.
 
 ## Quick Links
@@ -13,9 +19,9 @@ All variants are available in this single repository as different tags:
 
 | Tag | Full Image Name | Size | Description | Use Case |
 |-----|-----------------|------|-------------|----------|
-| `latest` | `scottgal/mostlylucid-nmt:latest` | ~2.5GB | CPU with source code | Production CPU deployments |
-| `min` | `scottgal/mostlylucid-nmt:min` | ~1.5GB | CPU minimal, no preloaded models | Volume-mapped cache, flexible |
-| `gpu` | `scottgal/mostlylucid-nmt:gpu` | ~5GB | GPU with CUDA 12.1 + source | Production GPU deployments |
+| `cpu` (or `latest`) | `scottgal/mostlylucid-nmt:cpu` | ~2.5GB | CPU with source code | Production CPU deployments |
+| `cpu-min` | `scottgal/mostlylucid-nmt:cpu-min` | ~1.5GB | CPU minimal, no preloaded models | Volume-mapped cache, flexible |
+| `gpu` | `scottgal/mostlylucid-nmt:gpu` | ~5GB | GPU with CUDA 12.6 + source | Production GPU deployments |
 | `gpu-min` | `scottgal/mostlylucid-nmt:gpu-min` | ~4GB | GPU minimal, no preloaded models | GPU with volume-mapped cache |
 
 **Note:** All images are built from the same source code, just with different configurations and base images.
@@ -24,14 +30,14 @@ All variants are available in this single repository as different tags:
 
 ```bash
 # Pull specific tag (always latest)
-docker pull scottgal/mostlylucid-nmt:latest
-docker pull scottgal/mostlylucid-nmt:min
+docker pull scottgal/mostlylucid-nmt:cpu        # or :latest
+docker pull scottgal/mostlylucid-nmt:cpu-min
 docker pull scottgal/mostlylucid-nmt:gpu
 docker pull scottgal/mostlylucid-nmt:gpu-min
 
 # Pull specific version (pinned)
-docker pull scottgal/mostlylucid-nmt:20250108.143022
-docker pull scottgal/mostlylucid-nmt:min-20250108.143022
+docker pull scottgal/mostlylucid-nmt:cpu-20250108.143022
+docker pull scottgal/mostlylucid-nmt:cpu-min-20250108.143022
 
 # Or just run (auto-pulls if not present)
 docker run scottgal/mostlylucid-nmt:gpu
@@ -40,8 +46,8 @@ docker run scottgal/mostlylucid-nmt:gpu
 ### Versioning
 
 Each image includes two types of tags:
-- **Named tags**: `latest`, `min`, `gpu`, `gpu-min` (always point to most recent build)
-- **Version tags**: Immutable snapshots with datetime format `YYYYMMDD.HHMMSS` (e.g., `20250108.143022`)
+- **Named tags**: `cpu` (alias: `latest`), `cpu-min`, `gpu`, `gpu-min` (always point to most recent build)
+- **Version tags**: Immutable snapshots with datetime format `YYYYMMDD.HHMMSS` (e.g., `cpu-20250108.143022`)
 
 All images include OCI labels with version, build date, git commit, and variant information.
 
@@ -105,7 +111,7 @@ docker run -d --gpus all -p 8000:8000 \
 - ✅ **Multi-model family support** - Opus-MT, mBART50, M2M100
 - ✅ **Auto-fallback** - Automatically tries other model families for maximum coverage
 - ✅ **Production-ready** - Queueing, backpressure, graceful shutdown
-- ✅ **GPU accelerated** - CUDA 12.1, FP16/BF16 support
+- ✅ **GPU accelerated** - CUDA 12.6, FP16/BF16 support
 - ✅ **EasyNMT compatible** - Drop-in replacement
 - ✅ **Model discovery** - Dynamically query available models
 - ✅ **Persistent cache** - Volume-mapped model storage

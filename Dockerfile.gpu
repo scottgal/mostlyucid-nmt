@@ -4,7 +4,7 @@
 # Run example (requires NVIDIA Container Toolkit):
 #   docker run --gpus all -e USE_GPU=true -e PRELOAD_MODELS="en->de,de->en" -p 8000:8000 scottgal/mostlylucid-nmt:gpu
 
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu24.04
 
 # Build arguments for versioning
 ARG VERSION=dev
@@ -13,7 +13,7 @@ ARG VCS_REF
 
 # OCI labels for metadata
 LABEL org.opencontainers.image.title="mostlylucid-nmt-gpu" \
-      org.opencontainers.image.description="FastAPI neural machine translation service - GPU with CUDA 12.1 and preloaded models" \
+      org.opencontainers.image.description="FastAPI neural machine translation service - GPU with CUDA 12.6 and preloaded models" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.source="https://github.com/scottgal/mostlylucid-nmt" \
@@ -44,9 +44,9 @@ COPY requirements.txt ./
 # Install Python deps from requirements first (will install CPU torch, then we upgrade to CUDA wheel)
 RUN pip3 install -r requirements.txt
 
-# Install CUDA-enabled PyTorch matching CUDA 12.1
+# Install CUDA-enabled PyTorch matching CUDA 12.4 (compatible with CUDA 12.6 runtime)
 # See https://pytorch.org for the latest index URL mapping
-RUN pip3 install --upgrade --index-url https://download.pytorch.org/whl/cu121 torch
+RUN pip3 install --upgrade --index-url https://download.pytorch.org/whl/cu124 torch
 
 COPY src/ ./src/
 COPY app.py ./

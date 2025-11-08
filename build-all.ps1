@@ -15,37 +15,38 @@ Write-Host "VCS ref: $VCS_REF" -ForegroundColor Cyan
 Write-Host "Build date: $BUILD_DATE" -ForegroundColor Cyan
 Write-Host ""
 
-# Docker repository
+# Docker repository - ONE repository with multiple tags
 $REPO = "scottgal/mostlylucid-nmt"
 
-# Build CPU full image (latest)
-Write-Host "Building ${REPO}:latest (CPU full)..." -ForegroundColor Yellow
+# Build CPU full image (cpu and latest tags)
+Write-Host "Building ${REPO}:cpu (CPU full)..." -ForegroundColor Yellow
 docker build `
   --build-arg VERSION="$VERSION" `
   --build-arg BUILD_DATE="$BUILD_DATE" `
   --build-arg VCS_REF="$VCS_REF" `
+  -t "${REPO}:cpu" `
   -t "${REPO}:latest" `
-  -t "${REPO}:${VERSION}" `
+  -t "${REPO}:cpu-${VERSION}" `
   -f Dockerfile `
   .
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# Build CPU minimal image
+# Build CPU minimal image (cpu-min tag)
 Write-Host ""
-Write-Host "Building ${REPO}:min (CPU minimal)..." -ForegroundColor Yellow
+Write-Host "Building ${REPO}:cpu-min (CPU minimal)..." -ForegroundColor Yellow
 docker build `
   --build-arg VERSION="$VERSION" `
   --build-arg BUILD_DATE="$BUILD_DATE" `
   --build-arg VCS_REF="$VCS_REF" `
-  -t "${REPO}:min" `
-  -t "${REPO}:min-${VERSION}" `
+  -t "${REPO}:cpu-min" `
+  -t "${REPO}:cpu-min-${VERSION}" `
   -f Dockerfile.min `
   .
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# Build GPU full image
+# Build GPU full image (gpu tag)
 Write-Host ""
 Write-Host "Building ${REPO}:gpu (GPU full)..." -ForegroundColor Yellow
 docker build `
@@ -59,7 +60,7 @@ docker build `
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# Build GPU minimal image
+# Build GPU minimal image (gpu-min tag)
 Write-Host ""
 Write-Host "Building ${REPO}:gpu-min (GPU minimal)..." -ForegroundColor Yellow
 docker build `
@@ -76,21 +77,22 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host ""
 Write-Host "✓ All builds completed successfully!" -ForegroundColor Green
 Write-Host ""
-Write-Host "Images built:"
-Write-Host "  ${REPO}:latest (and ${VERSION})"
-Write-Host "  ${REPO}:min (and min-${VERSION})"
-Write-Host "  ${REPO}:gpu (and gpu-${VERSION})"
-Write-Host "  ${REPO}:gpu-min (and gpu-min-${VERSION})"
+Write-Host "Images built (all in ONE repository with different tags):"
+Write-Host "  ${REPO}:cpu (also tagged as :latest and :cpu-${VERSION})"
+Write-Host "  ${REPO}:cpu-min (also tagged as :cpu-min-${VERSION})"
+Write-Host "  ${REPO}:gpu (also tagged as :gpu-${VERSION})"
+Write-Host "  ${REPO}:gpu-min (also tagged as :gpu-min-${VERSION})"
 Write-Host ""
 Write-Host "To push to Docker Hub:" -ForegroundColor Cyan
+Write-Host "  docker push ${REPO}:cpu"
 Write-Host "  docker push ${REPO}:latest"
-Write-Host "  docker push ${REPO}:${VERSION}"
-Write-Host "  docker push ${REPO}:min"
-Write-Host "  docker push ${REPO}:min-${VERSION}"
+Write-Host "  docker push ${REPO}:cpu-${VERSION}"
+Write-Host "  docker push ${REPO}:cpu-min"
+Write-Host "  docker push ${REPO}:cpu-min-${VERSION}"
 Write-Host "  docker push ${REPO}:gpu"
 Write-Host "  docker push ${REPO}:gpu-${VERSION}"
 Write-Host "  docker push ${REPO}:gpu-min"
 Write-Host "  docker push ${REPO}:gpu-min-${VERSION}"
 Write-Host ""
-Write-Host "Or push all at once:" -ForegroundColor Cyan
+Write-Host "Or push all tags at once:" -ForegroundColor Cyan
 Write-Host "  docker push ${REPO} --all-tags"

@@ -1,10 +1,12 @@
 ﻿# Marian Translator (EasyNMT-compatible API)
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/scottgal/mostlylucid-nmt)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
-[![latest](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/latest)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
-[![min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
-[![gpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
-[![gpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![cpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu?label=cpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![cpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu-min?label=cpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![gpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu?label=gpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![gpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu-min?label=gpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+
+📖 **[Complete Guide & Tutorial](https://www.mostlylucid.net/blog/mostlylucid-nmt-complete-guide)** - Comprehensive walkthrough with examples and best practices
 
 A FastAPI service that provides an EasyNMT-like HTTP API for machine translation supporting multiple model families:
 - **Opus-MT** (Helsinki-NLP): 1200+ translation pairs for 150+ languages
@@ -73,8 +75,8 @@ MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"
 
 | Image | Size | Models | Best For |
 |-------|------|--------|----------|
-| `scottgal/mostlylucid-nmt:latest` | ~2.5GB | Preloaded | Production CPU |
-| `scottgal/mostlylucid-nmt:min` | ~1.5GB | None (on-demand) | Flexible CPU deployment |
+| `scottgal/mostlylucid-nmt:cpu` (or `:latest`) | ~2.5GB | Preloaded | Production CPU |
+| `scottgal/mostlylucid-nmt:cpu-min` | ~1.5GB | None (on-demand) | Flexible CPU deployment |
 | `scottgal/mostlylucid-nmt:gpu` | ~5GB | Preloaded | Production GPU |
 | `scottgal/mostlylucid-nmt:gpu-min` | ~4GB | None (on-demand) | Flexible GPU deployment |
 
@@ -89,9 +91,9 @@ MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"
 
 ```bash
 # All from: scottgal/mostlylucid-nmt
-docker pull scottgal/mostlylucid-nmt:latest    # CPU
-docker pull scottgal/mostlylucid-nmt:min       # CPU minimal
-docker pull scottgal/mostlylucid-nmt:gpu       # GPU
+docker pull scottgal/mostlylucid-nmt:cpu       # CPU full (also available as :latest)
+docker pull scottgal/mostlylucid-nmt:cpu-min   # CPU minimal
+docker pull scottgal/mostlylucid-nmt:gpu       # GPU full
 docker pull scottgal/mostlylucid-nmt:gpu-min   # GPU minimal
 ```
 
@@ -117,6 +119,14 @@ docker run -p 8000:8000 ^
   -e MODEL_CACHE_DIR=/models ^
   scottgal/mostlylucid-nmt:min
 ```
+
+### 7. Updated Base Images - SECURITY!
+**Latest and most secure base images:**
+
+- **Python 3.13-slim** for CPU images (latest stable Python)
+- **CUDA 12.6** with Ubuntu 24.04 for GPU images
+- **PyTorch with CUDA 12.4** support (compatible with CUDA 12.6 runtime)
+- Addresses all known vulnerabilities in previous Python 3.11 and CUDA 12.1 images
 
 ---
 
@@ -250,7 +260,7 @@ Minimal images don't preload any models but download them on-demand and cache to
 #### CPU Minimal
 ```bash
 # Build
-docker build -f Dockerfile.min -t mostlylucid-nmt:min .
+docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:cpu-min .
 
 # Run with volume mapping for model cache
 docker run -p 8000:8000 \
@@ -524,11 +534,13 @@ Each build creates **two tags** per variant:
 
 Example:
 ```bash
-# Always get latest
+# Always get latest CPU full image
+docker pull scottgal/mostlylucid-nmt:cpu
+# Or use the :latest alias
 docker pull scottgal/mostlylucid-nmt:latest
 
 # Pin to specific version
-docker pull scottgal/mostlylucid-nmt:20250108.143022
+docker pull scottgal/mostlylucid-nmt:cpu-20250108.143022
 ```
 
 ### Publishing

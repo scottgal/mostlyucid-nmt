@@ -54,26 +54,27 @@ VCS_REF=$(git rev-parse --short HEAD)
 
 ### Build Individual Variants
 
-**CPU Full (latest):**
+**CPU Full (cpu and latest):**
 ```bash
 docker build \
   --build-arg VERSION="${VERSION}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg VCS_REF="${VCS_REF}" \
+  -t scottgal/mostlylucid-nmt:cpu \
   -t scottgal/mostlylucid-nmt:latest \
-  -t scottgal/mostlylucid-nmt:${VERSION} \
+  -t scottgal/mostlylucid-nmt:cpu-${VERSION} \
   -f Dockerfile \
   .
 ```
 
-**CPU Minimal (min):**
+**CPU Minimal (cpu-min):**
 ```bash
 docker build \
   --build-arg VERSION="${VERSION}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg VCS_REF="${VCS_REF}" \
-  -t scottgal/mostlylucid-nmt:min \
-  -t scottgal/mostlylucid-nmt:min-${VERSION} \
+  -t scottgal/mostlylucid-nmt:cpu-min \
+  -t scottgal/mostlylucid-nmt:cpu-min-${VERSION} \
   -f Dockerfile.min \
   .
 ```
@@ -117,10 +118,11 @@ docker login
 
 ```bash
 # Push CPU variants
+docker push scottgal/mostlylucid-nmt:cpu
 docker push scottgal/mostlylucid-nmt:latest
-docker push scottgal/mostlylucid-nmt:${VERSION}
-docker push scottgal/mostlylucid-nmt:min
-docker push scottgal/mostlylucid-nmt:min-${VERSION}
+docker push scottgal/mostlylucid-nmt:cpu-${VERSION}
+docker push scottgal/mostlylucid-nmt:cpu-min
+docker push scottgal/mostlylucid-nmt:cpu-min-${VERSION}
 
 # Push GPU variants
 docker push scottgal/mostlylucid-nmt:gpu
@@ -141,13 +143,13 @@ docker push scottgal/mostlylucid-nmt --all-tags
 
 Each build creates **two tags** per variant:
 
-1. **Named tag**: `latest`, `min`, `gpu`, `gpu-min` (always points to most recent build)
+1. **Named tag**: `cpu` (alias: `latest`), `cpu-min`, `gpu`, `gpu-min` (always points to most recent build)
 2. **Version tag**: `YYYYMMDD.HHMMSS` format (immutable snapshot)
 
 Example:
-- `scottgal/mostlylucid-nmt:latest` → Most recent CPU full build
-- `scottgal/mostlylucid-nmt:20250108.143022` → Specific build from Jan 8, 2025 at 14:30:22 UTC
-- `scottgal/mostlylucid-nmt:min-20250108.143022` → Specific minimal build
+- `scottgal/mostlylucid-nmt:cpu` (or `:latest`) → Most recent CPU full build
+- `scottgal/mostlylucid-nmt:cpu-20250108.143022` → Specific build from Jan 8, 2025 at 14:30:22 UTC
+- `scottgal/mostlylucid-nmt:cpu-min-20250108.143022` → Specific minimal build
 
 ### OCI Labels
 
@@ -162,7 +164,7 @@ Each image includes standard OCI labels:
 
 View labels for an image:
 ```bash
-docker inspect scottgal/mostlylucid-nmt:latest | jq '.[0].Config.Labels'
+docker inspect scottgal/mostlylucid-nmt:cpu | jq '.[0].Config.Labels'
 ```
 
 ## Verification
@@ -174,7 +176,7 @@ After building, verify the images:
 docker images scottgal/mostlylucid-nmt
 
 # Test an image
-docker run --rm -p 8000:8000 scottgal/mostlylucid-nmt:latest
+docker run --rm -p 8000:8000 scottgal/mostlylucid-nmt:cpu
 
 # Check version endpoint
 curl http://localhost:8000/model_name
@@ -196,8 +198,9 @@ For automated builds in CI/CD pipelines:
       --build-arg VERSION="${VERSION}" \
       --build-arg BUILD_DATE="${BUILD_DATE}" \
       --build-arg VCS_REF="${VCS_REF}" \
+      -t scottgal/mostlylucid-nmt:cpu \
       -t scottgal/mostlylucid-nmt:latest \
-      -t scottgal/mostlylucid-nmt:${VERSION} \
+      -t scottgal/mostlylucid-nmt:cpu-${VERSION} \
       .
 
     docker push scottgal/mostlylucid-nmt --all-tags
@@ -217,8 +220,9 @@ docker buildx build \
   --build-arg VERSION="${VERSION}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg VCS_REF="${VCS_REF}" \
+  -t scottgal/mostlylucid-nmt:cpu \
   -t scottgal/mostlylucid-nmt:latest \
-  -t scottgal/mostlylucid-nmt:${VERSION} \
+  -t scottgal/mostlylucid-nmt:cpu-${VERSION} \
   --push \
   .
 ```

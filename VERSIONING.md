@@ -16,15 +16,15 @@ Each build creates **two tags per variant**:
 
 ### Named Tags (Mutable)
 These always point to the most recent build:
-- `scottgal/mostlylucid-nmt:latest`
-- `scottgal/mostlylucid-nmt:min`
+- `scottgal/mostlylucid-nmt:cpu` (also aliased as `:latest`)
+- `scottgal/mostlylucid-nmt:cpu-min`
 - `scottgal/mostlylucid-nmt:gpu`
 - `scottgal/mostlylucid-nmt:gpu-min`
 
 ### Version Tags (Immutable)
 These are permanent snapshots:
-- `scottgal/mostlylucid-nmt:20250108.143022`
-- `scottgal/mostlylucid-nmt:min-20250108.143022`
+- `scottgal/mostlylucid-nmt:cpu-20250108.143022`
+- `scottgal/mostlylucid-nmt:cpu-min-20250108.143022`
 - `scottgal/mostlylucid-nmt:gpu-20250108.143022`
 - `scottgal/mostlylucid-nmt:gpu-min-20250108.143022`
 
@@ -51,12 +51,12 @@ Every image includes these labels:
 
 ### Check Image Version
 ```bash
-docker inspect scottgal/mostlylucid-nmt:latest | jq '.[0].Config.Labels."org.opencontainers.image.version"'
+docker inspect scottgal/mostlylucid-nmt:cpu | jq '.[0].Config.Labels."org.opencontainers.image.version"'
 ```
 
 ### Check All Labels
 ```bash
-docker inspect scottgal/mostlylucid-nmt:latest | jq '.[0].Config.Labels'
+docker inspect scottgal/mostlylucid-nmt:cpu | jq '.[0].Config.Labels'
 ```
 
 ### List All Available Tags
@@ -70,15 +70,15 @@ Or visit: https://hub.docker.com/r/scottgal/mostlylucid-nmt/tags
 
 ### Development (Always Latest)
 ```bash
-docker pull scottgal/mostlylucid-nmt:latest
-docker run -p 8000:8000 scottgal/mostlylucid-nmt:latest
+docker pull scottgal/mostlylucid-nmt:cpu
+docker run -p 8000:8000 scottgal/mostlylucid-nmt:cpu
 ```
 
 ### Production (Pinned Version)
 ```bash
 # Pin to specific tested version
-docker pull scottgal/mostlylucid-nmt:20250108.143022
-docker run -p 8000:8000 scottgal/mostlylucid-nmt:20250108.143022
+docker pull scottgal/mostlylucid-nmt:cpu-20250108.143022
+docker run -p 8000:8000 scottgal/mostlylucid-nmt:cpu-20250108.143022
 ```
 
 ### Docker Compose (Pinned)
@@ -105,7 +105,7 @@ spec:
     spec:
       containers:
       - name: translator
-        image: scottgal/mostlylucid-nmt:20250108.143022
+        image: scottgal/mostlylucid-nmt:cpu-20250108.143022
         imagePullPolicy: IfNotPresent
 ```
 
@@ -142,8 +142,9 @@ docker build \
   --build-arg VERSION="${VERSION}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg VCS_REF="${VCS_REF}" \
+  -t scottgal/mostlylucid-nmt:cpu \
   -t scottgal/mostlylucid-nmt:latest \
-  -t scottgal/mostlylucid-nmt:${VERSION} \
+  -t scottgal/mostlylucid-nmt:cpu-${VERSION} \
   .
 ```
 
@@ -156,16 +157,17 @@ docker login
 
 ### Push Named Tags (Updates Latest)
 ```bash
+docker push scottgal/mostlylucid-nmt:cpu
 docker push scottgal/mostlylucid-nmt:latest
-docker push scottgal/mostlylucid-nmt:min
+docker push scottgal/mostlylucid-nmt:cpu-min
 docker push scottgal/mostlylucid-nmt:gpu
 docker push scottgal/mostlylucid-nmt:gpu-min
 ```
 
 ### Push Version Tags (Permanent Snapshots)
 ```bash
-docker push scottgal/mostlylucid-nmt:20250108.143022
-docker push scottgal/mostlylucid-nmt:min-20250108.143022
+docker push scottgal/mostlylucid-nmt:cpu-20250108.143022
+docker push scottgal/mostlylucid-nmt:cpu-min-20250108.143022
 docker push scottgal/mostlylucid-nmt:gpu-20250108.143022
 docker push scottgal/mostlylucid-nmt:gpu-min-20250108.143022
 ```

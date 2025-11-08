@@ -1,6 +1,6 @@
 # Dockerfile - CPU production image with preloaded models
 # Build: docker build -t scottgal/mostlylucid-nmt:latest --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Build arguments for versioning
 ARG VERSION=dev
