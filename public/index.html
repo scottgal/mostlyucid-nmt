@@ -33,8 +33,8 @@
     .row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
     .row + .row { margin-top: 10px; }
     label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; }
-    select, input[type="number"], textarea { width: 100%; background: #0b1220; color: var(--text); border: 1px solid #223045; border-radius: 10px; padding: 10px 12px; outline: none; transition: border .2s ease, box-shadow .2s ease; }
-    select:focus, input[type="number"]:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,.12); }
+    select, input[type="number"], input[type="text"], textarea { width: 100%; background: #0b1220; color: var(--text); border: 1px solid #223045; border-radius: 10px; padding: 10px 12px; outline: none; transition: border .2s ease, box-shadow .2s ease; }
+    select:focus, input[type="number"]:focus, input[type="text"]:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,.12); }
     textarea { min-height: 160px; resize: vertical; line-height: 1.4; }
     .btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #1e293b; color: #0b1220; background: linear-gradient(180deg, #67e8f9, #22d3ee); font-weight: 600; padding: 10px 14px; border-radius: 10px; cursor: pointer; transition: transform .06s ease; }
     .btn:active { transform: translateY(1px); }
@@ -64,12 +64,14 @@
           <h2>Translate</h2>
           <div class="row">
             <div>
-              <label for="source">Source language</label>
-              <select id="source"></select>
+              <label for="source">Source language (type or select)</label>
+              <input type="text" id="source" list="source-list" placeholder="e.g., en, fr, de..." />
+              <datalist id="source-list"></datalist>
             </div>
             <div>
-              <label for="target">Target language</label>
-              <select id="target"></select>
+              <label for="target">Target language (type or select)</label>
+              <input type="text" id="target" list="target-list" placeholder="e.g., de, es, zh..." />
+              <datalist id="target-list"></datalist>
             </div>
             <div>
               <button id="swap" class="btn ghost" title="Swap languages">⇄ Swap</button>
@@ -198,24 +200,32 @@
     }
 
     function fillLangs(list) {
-      els.source.innerHTML = ''; els.target.innerHTML = '';
+      const sourceList = document.getElementById('source-list');
+      const targetList = document.getElementById('target-list');
+      sourceList.innerHTML = ''; targetList.innerHTML = '';
+
       const names = [...list].map(code => ({ code, name: LANG_NAMES[code] || code.toUpperCase() }))
         .sort((a,b) => a.name.localeCompare(b.name));
+
       names.forEach(({code, name}) => {
-        els.source.appendChild(option(`${name} (${code})`, code));
-        els.target.appendChild(option(`${name} (${code})`, code));
+        sourceList.appendChild(option(`${name} (${code})`, code));
+        targetList.appendChild(option(`${name} (${code})`, code));
       });
+
       // sensible defaults
-      if ([...els.source.options].some(o => o.value === 'en')) els.source.value = 'en';
-      if ([...els.target.options].some(o => o.value === 'de')) els.target.value = 'de';
+      els.source.value = 'en';
+      els.target.value = 'de';
     }
 
-    // Add language to source dropdown if not already present
+    // Add language to source datalist if not already present
     function addLanguageToSource(code) {
-      if (![...els.source.options].some(o => o.value === code)) {
+      const sourceList = document.getElementById('source-list');
+      const existing = [...sourceList.options].find(o => o.value === code);
+
+      if (!existing) {
         const name = LANG_NAMES[code] || code.toUpperCase();
         const opt = option(`${name} (${code}) [detected]`, code);
-        els.source.appendChild(opt);
+        sourceList.appendChild(opt);
       }
       els.source.value = code;
     }

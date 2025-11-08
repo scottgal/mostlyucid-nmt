@@ -8,7 +8,7 @@ from typing import List, Union, Optional, TYPE_CHECKING
 from fastapi import Request, HTTPException
 
 from src.config import config
-from src.models import TranslatePostBody, TranslateResponse, TranslatePostResponse
+from src.models import TranslatePostBody, TranslateResponse, TranslatePostResponse, TranslationMetadata
 from src.core.logging import logger
 from src.services.language_detection import language_detector
 from src.services.queue_manager import acquire_translate_slot, queue_manager
@@ -83,20 +83,25 @@ async def translate_get(
     src = source_lang or language_detector.detect_language(first_non_noise)
     eff_beam = _get_effective_beam_size(beam_size)
 
+    # Check if metadata is requested via header or global config
+    enable_metadata_header = request.headers.get("X-Enable-Metadata", "").lower() in ("1", "true", "yes")
+    include_metadata = enable_metadata_header or config.ENABLE_METADATA
+
     start_t = time.perf_counter()
     texts = []
     pivot_used = False
+    metadata_dict = None
 
     try:
         async with await acquire_translate_slot():
             if config.TRANSLATE_TIMEOUT_SEC > 0:
-                texts, pivot_used = await asyncio.wait_for(
-                    translation_service.translate_async(base_texts, src, target_lang, eff_beam, perform_sentence_splitting),
+                texts, pivot_used, metadata_dict = await asyncio.wait_for(
+                    translation_service.translate_async(base_texts, src, target_lang, eff_beam, perform_sentence_splitting, include_metadata),
                     timeout=config.TRANSLATE_TIMEOUT_SEC
                 )
             else:
-                texts, pivot_used = await translation_service.translate_async(
-                    base_texts, src, target_lang, eff_beam, perform_sentence_splitting
+                texts, pivot_used, metadata_dict = await translation_service.translate_async(
+                    base_texts, src, target_lang, eff_beam, perform_sentence_splitting, include_metadata
                 )
 
     except QueueOverflowError as e:
@@ -131,7 +136,28 @@ async def translate_get(
     if pivot_used:
         pivot_path = f"{src}->{config.PIVOT_LANG}->{target_lang}"
 
-    return TranslateResponse(translations=texts, pivot_path=pivot_path)
+    response = TranslateResponse(translations=texts, pivot_path=pivot_path)
+
+    # Optionally add metadata to response headers
+    if config.METADATA_VIA_HEADERS and metadata_dict:
+        from fastapi import Response
+        import json
+
+        response_dict = response.model_dump(exclude_none=True)
+        json_response = Response(
+            content=json.dumps(response_dict),
+            media_type="application/json",
+            headers={
+                "X-Model-Name": metadata_dict.get("model_name", ""),
+                "X-Model-Family": metadata_dict.get("model_family", ""),
+                "X-Languages-Used": ",".join(metadata_dict.get("languages_used", [])),
+                "X-Chunks-Processed": str(metadata_dict.get("chunks_processed", 0)),
+                "X-Auto-Chunked": str(metadata_dict.get("auto_chunked", False)).lower()
+            }
+        )
+        return json_response
+
+    return response
 
 
 async def translate_post(
@@ -142,6 +168,10 @@ async def translate_post(
     """POST endpoint for translation."""
     req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     base_texts = _normalize_texts(body.text)
+
+    # Check if metadata is requested via header or global config
+    enable_metadata_header = request.headers.get("X-Enable-Metadata", "").lower() in ("1", "true", "yes")
+    include_metadata = enable_metadata_header or config.ENABLE_METADATA
 
     perform_sentence_splitting = (
         body.perform_sentence_splitting
@@ -171,17 +201,18 @@ async def translate_post(
     start_t = time.perf_counter()
     texts = []
     pivot_used = False
+    metadata_dict = None
 
     try:
         async with await acquire_translate_slot():
             if config.TRANSLATE_TIMEOUT_SEC > 0:
-                texts, pivot_used = await asyncio.wait_for(
-                    translation_service.translate_async(base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting),
+                texts, pivot_used, metadata_dict = await asyncio.wait_for(
+                    translation_service.translate_async(base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata),
                     timeout=config.TRANSLATE_TIMEOUT_SEC
                 )
             else:
-                texts, pivot_used = await translation_service.translate_async(
-                    base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting
+                texts, pivot_used, metadata_dict = await translation_service.translate_async(
+                    base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata
                 )
 
     except QueueOverflowError as e:
@@ -219,10 +250,38 @@ async def translate_post(
     if pivot_used:
         pivot_path = f"{src}->{config.PIVOT_LANG}->{body.target_lang}"
 
-    return TranslatePostResponse(
+    # Build metadata object if requested
+    metadata_obj = None
+    if include_metadata and metadata_dict:
+        metadata_obj = TranslationMetadata(**metadata_dict)
+
+    response = TranslatePostResponse(
         target_lang=body.target_lang,
         source_lang=src,
         translated=texts,
         translation_time=float(duration_sec),
-        pivot_path=pivot_path
+        pivot_path=pivot_path,
+        metadata=metadata_obj
     )
+
+    # Optionally add metadata to response headers
+    if config.METADATA_VIA_HEADERS and metadata_dict:
+        # Custom response with headers (FastAPI will handle this)
+        from fastapi import Response
+        import json
+
+        response_dict = response.model_dump(exclude_none=True)
+        json_response = Response(
+            content=json.dumps(response_dict),
+            media_type="application/json",
+            headers={
+                "X-Model-Name": metadata_dict.get("model_name", ""),
+                "X-Model-Family": metadata_dict.get("model_family", ""),
+                "X-Languages-Used": ",".join(metadata_dict.get("languages_used", [])),
+                "X-Chunks-Processed": str(metadata_dict.get("chunks_processed", 0)),
+                "X-Auto-Chunked": str(metadata_dict.get("auto_chunked", False)).lower()
+            }
+        )
+        return json_response
+
+    return response

@@ -130,6 +130,14 @@ class Config:
     # Default: opus-mt first (best quality), then mbart50, then m2m100 (broadest coverage)
     MODEL_FALLBACK_ORDER: str = os.getenv("MODEL_FALLBACK_ORDER", "opus-mt,mbart50,m2m100")
 
+    # Auto-chunking for large inputs
+    AUTO_CHUNK_ENABLED: bool = os.getenv("AUTO_CHUNK_ENABLED", "1").lower() in ("1", "true", "yes")
+    AUTO_CHUNK_MAX_CHARS: int = int(os.getenv("AUTO_CHUNK_MAX_CHARS", "5000"))  # Safe default per chunk
+
+    # Metadata tracking (model, languages, timing, chunks, etc.)
+    ENABLE_METADATA: bool = os.getenv("ENABLE_METADATA", "0").lower() in ("1", "true", "yes")
+    METADATA_VIA_HEADERS: bool = os.getenv("METADATA_VIA_HEADERS", "0").lower() in ("1", "true", "yes")
+
     @classmethod
     def get_supported_langs(cls) -> List[str]:
         """Get supported language codes for current model family.

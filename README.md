@@ -16,6 +16,8 @@ A FastAPI service that provides an EasyNMT-like HTTP API for machine translation
 Features:
 - Compatible endpoints with EasyNMT: `/translate` (GET/POST), `/lang_pairs`, `/get_languages`, `/language_detection` (GET/POST), `/model_name`
 - New discovery endpoints to find available models dynamically
+- **Auto-chunking**: Automatically handles texts of any size - no client-side splitting needed!
+- **Translation metadata**: Optional detailed info about model, languages, chunking, and timing
 - Swagger UI available at `/docs` (also at `/` via redirect) and ReDoc at `/redoc`
 - CPU and GPU support (CUDA), with on-demand model loading and LRU in-memory cache
 - Minimal Docker images with volume-mapped model caching
@@ -120,7 +122,44 @@ docker run -p 8000:8000 ^
   scottgal/mostlylucid-nmt:cpu-min
 ```
 
-### 7. Updated Base Images - SECURITY!
+### 7. Auto-Chunking - NEW!
+**Throw text of ANY size at the API!**
+
+- Automatically splits large texts into safe chunks
+- Processes each chunk independently
+- Reassembles results seamlessly
+- **No client-side chunking needed!**
+
+```bash
+# Translate a 50,000 character document - automatically chunked!
+AUTO_CHUNK_ENABLED=1           # Default: ON
+AUTO_CHUNK_MAX_CHARS=5000      # Chars per chunk (default: 5000)
+```
+
+**How it works:** Input text > 5000 chars → auto-split → translate → reassemble → return as single translation!
+
+### 8. Translation Metadata - NEW!
+**Get detailed information about each translation:**
+
+```bash
+# Enable via header (per-request)
+curl -H 'X-Enable-Metadata: 1' http://localhost:8000/translate ...
+
+# Or globally
+ENABLE_METADATA=1              # Include metadata in responses
+METADATA_VIA_HEADERS=1         # Also add to HTTP headers
+```
+
+**Metadata includes:**
+- Model name and family used
+- Languages involved (including pivot if used)
+- Number of chunks processed
+- Whether auto-chunking was applied
+- Chunk size configuration
+
+**Perfect for:** monitoring, debugging, analytics, and understanding how your translations are processed!
+
+### 9. Updated Base Images - SECURITY!
 **Latest and most secure base images:**
 
 - **Python 3.13-slim** for CPU images (latest stable Python)
@@ -389,6 +428,91 @@ Notes:
 - On success, `translations` length always equals the number of input items, with non-null strings (placeholder on per-item failure).
 - On overload, server returns 429/503 with `Retry-After` header and JSON `{ "retry_after_sec": N }`.
 
+#### Auto-Chunking (NEW!)
+**Automatically handles texts of any size!** No need to pre-chunk your input.
+
+When enabled (default), the service automatically splits large texts into safe chunks, processes them, and reassembles the results.
+
+**Configuration:**
+```bash
+AUTO_CHUNK_ENABLED=1           # Enable auto-chunking (default: ON)
+AUTO_CHUNK_MAX_CHARS=5000      # Max chars per chunk (default: 5000)
+```
+
+**How it works:**
+1. Input text > `AUTO_CHUNK_MAX_CHARS` → automatically split into chunks
+2. Each chunk is translated independently
+3. Results are reassembled and returned as a single translation
+4. Works transparently - no client-side changes needed!
+
+**Example:**
+```bash
+# Translate a 50,000 character document - no problem!
+curl -X POST http://localhost:8000/translate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "text": "Your very long text here... (50,000 chars)",
+    "target_lang": "de",
+    "source_lang": "en"
+  }'
+# Automatically chunked into 10 pieces, translated, and reassembled!
+```
+
+#### Translation Metadata (NEW!)
+**Get detailed information about each translation!**
+
+Enable metadata to receive additional information about model used, languages, chunking, and more.
+
+**Enable via header (per-request):**
+```bash
+curl -X POST http://localhost:8000/translate \
+  -H 'Content-Type: application/json' \
+  -H 'X-Enable-Metadata: 1' \
+  -d '{"text": "Hello world", "target_lang": "de", "source_lang": "en"}'
+```
+
+**Or globally via config:**
+```bash
+ENABLE_METADATA=1              # Always include metadata (default: OFF)
+METADATA_VIA_HEADERS=1         # Also add metadata to response headers (default: OFF)
+```
+
+**Response with metadata:**
+```json
+{
+  "target_lang": "de",
+  "source_lang": "en",
+  "translated": ["Hallo Welt"],
+  "translation_time": 0.15,
+  "pivot_path": null,
+  "metadata": {
+    "model_name": "Helsinki-NLP/opus-mt-en-de",
+    "model_family": "opus-mt",
+    "languages_used": ["en", "de"],
+    "chunks_processed": 1,
+    "chunk_size": 5000,
+    "auto_chunked": false
+  }
+}
+```
+
+**Metadata fields:**
+- `model_name`: Actual model used for translation
+- `model_family`: opus-mt, mbart50, or m2m100
+- `languages_used`: All languages involved (includes pivot if used)
+- `chunks_processed`: Number of chunks processed
+- `chunk_size`: Max characters per chunk
+- `auto_chunked`: Whether auto-chunking was applied
+
+**Metadata in headers** (when `METADATA_VIA_HEADERS=1`):
+```
+X-Model-Name: Helsinki-NLP/opus-mt-en-de
+X-Model-Family: opus-mt
+X-Languages-Used: en,de
+X-Chunks-Processed: 1
+X-Auto-Chunked: false
+```
+
 ### `/lang_pairs`
 Returns all supported source/target pairs built from the `SUPPORTED_LANGS` set.
 
@@ -611,6 +735,20 @@ Defaults are shown in parentheses.
 - `MAX_SENTENCE_CHARS` = int (`500`) — max chars per sentence before further splitting.
 - `MAX_CHUNK_CHARS` = int (`900`) — re-chunk sentences to this size for translation.
 - `JOIN_SENTENCES_WITH` = string (`" "`) — glue used when recombining translated chunks.
+
+### Auto-Chunking (NEW!)
+- `AUTO_CHUNK_ENABLED` = `1|0` (`1`) — automatically split large texts into safe chunks before translation. Handles texts of any size!
+- `AUTO_CHUNK_MAX_CHARS` = int (`5000`) — maximum characters per chunk. Texts exceeding this are automatically split, translated, and reassembled.
+
+**Why auto-chunking?** Throws any text at the API without worrying about size limits. The service handles chunking automatically and reassembles results seamlessly.
+
+### Translation Metadata (NEW!)
+- `ENABLE_METADATA` = `1|0` (`0`) — include metadata in translation responses (model, languages, chunking info, etc.).
+- `METADATA_VIA_HEADERS` = `1|0` (`0`) — also include metadata in response headers (X-Model-Name, X-Languages-Used, etc.).
+
+**Metadata can also be enabled per-request** by adding the `X-Enable-Metadata: 1` header to your request.
+
+**Metadata includes:** model name, model family, languages used (including pivot), chunks processed, chunk size, and whether auto-chunking was applied.
 
 ### Pivot Fallback
 - `PIVOT_FALLBACK` = `1|0` (`1`) — enable two-hop translation via pivot if direct model fails.

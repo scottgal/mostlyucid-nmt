@@ -1,6 +1,6 @@
 """Translation service with robust error handling and processing pipeline."""
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
@@ -193,14 +193,73 @@ class TranslationService:
 
         return (outputs, pivot_used)
 
+    def _auto_chunk_texts(self, texts: List[str]) -> Tuple[List[str], List[Tuple[int, int]]]:
+        """Auto-chunk texts that exceed max chunk size.
+
+        Args:
+            texts: List of input texts
+
+        Returns:
+            Tuple of (chunked_texts, chunk_map) where chunk_map contains (original_index, num_chunks)
+        """
+        if not config.AUTO_CHUNK_ENABLED:
+            return (texts, [(i, 1) for i in range(len(texts))])
+
+        max_chars = config.AUTO_CHUNK_MAX_CHARS
+        chunked_texts: List[str] = []
+        chunk_map: List[Tuple[int, int]] = []
+
+        for i, text in enumerate(texts):
+            if len(text) <= max_chars:
+                chunked_texts.append(text)
+                chunk_map.append((i, 1))
+            else:
+                # Split large text into chunks
+                num_chunks = (len(text) + max_chars - 1) // max_chars
+                for chunk_idx in range(num_chunks):
+                    start = chunk_idx * max_chars
+                    end = min(start + max_chars, len(text))
+                    chunk = text[start:end]
+                    chunked_texts.append(chunk)
+
+                chunk_map.append((i, num_chunks))
+
+        return (chunked_texts, chunk_map)
+
+    def _reassemble_chunks(self, translations: List[str], chunk_map: List[Tuple[int, int]]) -> List[str]:
+        """Reassemble chunked translations back to original structure.
+
+        Args:
+            translations: List of translated chunks
+            chunk_map: Mapping of (original_index, num_chunks)
+
+        Returns:
+            List of reassembled translations matching original input length
+        """
+        result: List[str] = []
+        trans_idx = 0
+
+        for orig_idx, num_chunks in chunk_map:
+            if num_chunks == 1:
+                result.append(translations[trans_idx])
+                trans_idx += 1
+            else:
+                # Combine multiple chunks
+                combined = config.JOIN_SENTENCES_WITH.join(translations[trans_idx:trans_idx + num_chunks])
+                result.append(combined)
+                trans_idx += num_chunks
+
+        return result
+
     async def translate_async(
         self,
         texts: List[str],
         src: str,
         tgt: str,
         beam_size: int,
-        perform_sentence_splitting: bool
-    ) -> Tuple[List[str], bool]:
+        perform_sentence_splitting: bool,
+        include_metadata: bool = False
+    ) -> Tuple[List[str], bool, Optional[Dict[str, Any]]]:
         """Asynchronously translate texts using thread pool.
 
         Args:
@@ -209,21 +268,59 @@ class TranslationService:
             tgt: Target language
             beam_size: Beam size
             perform_sentence_splitting: Whether to split sentences
+            include_metadata: Whether to include metadata in response
 
         Returns:
-            Tuple of (list of translations, pivot_used flag)
+            Tuple of (list of translations, pivot_used flag, optional metadata dict)
         """
         loop = asyncio.get_event_loop()
 
-        return await loop.run_in_executor(
+        # Auto-chunk if needed
+        chunked_texts, chunk_map = self._auto_chunk_texts(texts)
+        auto_chunked = any(num_chunks > 1 for _, num_chunks in chunk_map)
+        total_chunks = sum(num_chunks for _, num_chunks in chunk_map)
+
+        # Translate chunked texts
+        translations, pivot_used = await loop.run_in_executor(
             self.executor,
             self.translate_texts_aligned,
-            texts,
+            chunked_texts,
             src,
             tgt,
             beam_size,
             perform_sentence_splitting
         )
+
+        # Reassemble chunks
+        final_translations = self._reassemble_chunks(translations, chunk_map)
+
+        # Build metadata if requested
+        metadata = None
+        if include_metadata:
+            # Get model info
+            try:
+                model_name, src_lang, tgt_lang = model_manager._get_model_name_and_langs(src, tgt)
+            except Exception:
+                model_name = f"unknown-{src}-{tgt}"
+                src_lang, tgt_lang = src, tgt
+
+            languages_used = [src_lang, tgt_lang]
+            if pivot_used and config.PIVOT_LANG not in [src, tgt]:
+                pivot_model = config.PIVOT_LANG
+                if config.MODEL_FAMILY == "mbart50":
+                    pivot_model = f"{config.PIVOT_LANG}_XX"
+                languages_used = [src_lang, pivot_model, tgt_lang]
+
+            metadata = {
+                "model_name": model_name,
+                "model_family": config.MODEL_FAMILY,
+                "languages_used": languages_used,
+                "chunks_processed": total_chunks,
+                "chunk_size": config.AUTO_CHUNK_MAX_CHARS,
+                "auto_chunked": auto_chunked
+            }
+
+        return (final_translations, pivot_used, metadata)
 
 
 # We'll instantiate this in the main app with the executor

@@ -1,6 +1,6 @@
 """Pydantic models for request/response validation."""
 
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Optional
 from pydantic import BaseModel, Field, validator
 
 
@@ -37,6 +37,17 @@ class TranslateResponse(BaseModel):
     pivot_path: Union[str, None] = Field(default=None, description="Pivot translation path if used (e.g., 'ja->en->de')")
 
 
+class TranslationMetadata(BaseModel):
+    """Optional metadata for translation response."""
+
+    model_name: str = Field(..., description="Model used for translation")
+    model_family: str = Field(..., description="Model family (opus-mt, mbart50, m2m100)")
+    languages_used: List[str] = Field(..., description="All languages used (including pivot if applicable)")
+    chunks_processed: int = Field(..., description="Number of chunks processed")
+    chunk_size: int = Field(..., description="Max characters per chunk")
+    auto_chunked: bool = Field(..., description="Whether auto-chunking was applied")
+
+
 class TranslatePostResponse(BaseModel):
     """Response for POST /translate endpoint."""
 
@@ -45,6 +56,7 @@ class TranslatePostResponse(BaseModel):
     translated: List[str] = Field(..., description="Translated texts")
     translation_time: float = Field(..., description="Translation duration in seconds")
     pivot_path: Union[str, None] = Field(default=None, description="Pivot translation path if used (e.g., 'ja->en->de')")
+    metadata: Optional[TranslationMetadata] = Field(default=None, description="Optional metadata about the translation")
 
 
 class LanguageDetectionPostBody(BaseModel):
