@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Added `--break-system-packages` flag to pip installs in GPU Dockerfiles for Ubuntu 24.04 compatibility (PEP 668)
+- Fixed OCI image titles: All Dockerfiles now use same `org.opencontainers.image.title="mostlylucid-nmt"` to ensure all images go to ONE Docker Hub repository with different tags (previously used hyphened names that could cause confusion)
 
 ### Changed
 - **Tag structure updated**: All images now use clearer tag names

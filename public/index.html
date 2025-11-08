@@ -1,0 +1,303 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mostlylucid-nmt Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --muted: #94a3b8;
+      --text: #e5e7eb;
+      --accent: #22d3ee;
+      --accent-2: #a78bfa;
+      --danger: #ef4444;
+      --ok: #10b981;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: linear-gradient(180deg, #0b1220, #0f172a 40%);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    header { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+    .badge { padding: 4px 10px; border-radius: 999px; background: rgba(167,139,250,.15); color: #e9d5ff; font-size: 12px; border: 1px solid rgba(167,139,250,.35); }
+    h1 { margin: 0; font-size: 26px; letter-spacing: .3px; }
+    .grid { display: grid; grid-template-columns: 1.3fr .7fr; gap: 18px; }
+    @media (max-width: 900px){ .grid { grid-template-columns: 1fr; }}
+    .card { background: linear-gradient(180deg, #0b1220, #0a0f1a); border: 1px solid #1f2937; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .card h2 { font-size: 14px; letter-spacing: .2px; color: var(--muted); margin: 0 0 14px 0; }
+    .card-body { padding: 18px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+    .row + .row { margin-top: 10px; }
+    label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; }
+    select, input[type="number"], textarea { width: 100%; background: #0b1220; color: var(--text); border: 1px solid #223045; border-radius: 10px; padding: 10px 12px; outline: none; transition: border .2s ease, box-shadow .2s ease; }
+    select:focus, input[type="number"]:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,.12); }
+    textarea { min-height: 160px; resize: vertical; line-height: 1.4; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #1e293b; color: #0b1220; background: linear-gradient(180deg, #67e8f9, #22d3ee); font-weight: 600; padding: 10px 14px; border-radius: 10px; cursor: pointer; transition: transform .06s ease; }
+    .btn:active { transform: translateY(1px); }
+    .btn.secondary { background: linear-gradient(180deg, #c7d2fe, #a78bfa); color: #0b1220; }
+    .btn.ghost { background: transparent; color: var(--text); border-color: #334155; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stat { background: rgba(34, 211, 238, .08); border: 1px solid rgba(34,211,238,.3); color: #ccfbf1; padding: 8px 10px; border-radius: 10px; font-size: 12px; }
+    .output { white-space: pre-wrap; background: #050a12; border: 1px solid #1f2a40; border-radius: 10px; padding: 12px; min-height: 120px; }
+    .flex { display: flex; align-items: center; gap: 10px; }
+    .space { height: 10px; }
+    .link { color: #7dd3fc; text-decoration: none; border-bottom: 1px dashed rgba(125,211,252,.5); }
+    .pill { padding: 6px 10px; border-radius: 999px; background: #052736; color: #a5f3fc; border: 1px solid #1f2a40; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Demo</span>
+      <h1>mostlylucid-nmt Translator</h1>
+      <span class="muted">Interactive demo to test translation API</span>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-body">
+          <h2>Translate</h2>
+          <div class="row">
+            <div>
+              <label for="source">Source language</label>
+              <select id="source"></select>
+            </div>
+            <div>
+              <label for="target">Target language</label>
+              <select id="target"></select>
+            </div>
+            <div>
+              <button id="swap" class="btn ghost" title="Swap languages">⇄ Swap</button>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="beam">Beam size</label>
+              <input id="beam" type="number" min="1" max="10" value="5" />
+            </div>
+            <div>
+              <label for="split">Sentence splitting</label>
+              <select id="split">
+                <option value="true" selected>Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+            </div>
+            <div class="flex" style="justify-content:flex-end">
+              <button id="detect" class="btn secondary" title="Detect language of text">Detect language</button>
+            </div>
+          </div>
+
+          <div class="space"></div>
+
+          <label for="text">Text to translate</label>
+          <textarea id="text" placeholder="Type or paste text here..."></textarea>
+
+          <div class="space"></div>
+
+          <div class="flex" style="justify-content:space-between">
+            <div class="stats">
+              <div id="stat-time" class="stat">Time: —</div>
+              <div id="stat-len" class="stat">Chars: 0</div>
+              <div id="stat-status" class="pill">Idle</div>
+            </div>
+            <button id="go" class="btn">Translate</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <h2>Output</h2>
+          <div id="output" class="output"></div>
+          <div class="space"></div>
+          <h2>Model Families</h2>
+          <div class="row">
+            <div>
+              <label for="family">Explore model family pairs</label>
+              <select id="family">
+                <option value="opus-mt" selected>Opus‑MT</option>
+                <option value="mbart50">mBART50</option>
+                <option value="m2m100">M2M100</option>
+              </select>
+            </div>
+            <div class="flex" style="justify-content:flex-end">
+              <button id="loadPairs" class="btn ghost">Load pairs</button>
+            </div>
+          </div>
+          <div class="space"></div>
+          <div id="pairs" class="output" style="min-height:80px"></div>
+          <p class="muted">Note: The server selects the actual model family based on its configuration and availability. Family selection here is for discovery.</p>
+          <p class="muted">API base: <span id="apiBase" class="pill"></span></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="space"></div>
+    <p class="muted">Endpoints used: /get_languages, /language_detection, /translate, /discover/* — See project README for details. <a class="link" href="https://github.com/scottgal/mostlylucid-nmt" target="_blank" rel="noreferrer">GitHub</a></p>
+  </div>
+
+  <script>
+    // Minimal English names for common language codes present in config
+    const LANG_NAMES = {
+      af: 'Afrikaans', am: 'Amharic', ar: 'Arabic', ast: 'Asturian', az: 'Azerbaijani',
+      ba: 'Bashkir', be: 'Belarusian', bg: 'Bulgarian', bn: 'Bengali', br: 'Breton',
+      bs: 'Bosnian', ca: 'Catalan', ceb: 'Cebuano', cs: 'Czech', cy: 'Welsh',
+      da: 'Danish', de: 'German', el: 'Greek', en: 'English', es: 'Spanish',
+      et: 'Estonian', fa: 'Persian', ff: 'Fulah', fi: 'Finnish', fr: 'French',
+      fy: 'Frisian', ga: 'Irish', gd: 'Scottish Gaelic', gl: 'Galician', gu: 'Gujarati',
+      ha: 'Hausa', he: 'Hebrew', hi: 'Hindi', hr: 'Croatian', ht: 'Haitian',
+      hu: 'Hungarian', hy: 'Armenian', id: 'Indonesian', ig: 'Igbo', ilo: 'Ilocano',
+      is: 'Icelandic', it: 'Italian', ja: 'Japanese', jv: 'Javanese', ka: 'Georgian',
+      kk: 'Kazakh', km: 'Khmer', kn: 'Kannada', ko: 'Korean', lb: 'Luxembourgish',
+      lg: 'Ganda', ln: 'Lingala', lo: 'Lao', lt: 'Lithuanian', lv: 'Latvian',
+      mg: 'Malagasy', mk: 'Macedonian', ml: 'Malayalam', mn: 'Mongolian', mr: 'Marathi',
+      ms: 'Malay', my: 'Burmese', ne: 'Nepali', nl: 'Dutch', no: 'Norwegian',
+      ns: 'Northern Sotho', oc: 'Occitan', or: 'Odia', pa: 'Punjabi', pl: 'Polish',
+      ps: 'Pashto', pt: 'Portuguese', ro: 'Romanian', ru: 'Russian', sd: 'Sindhi',
+      si: 'Sinhala', sk: 'Slovak', sl: 'Slovene', so: 'Somali', sq: 'Albanian',
+      sr: 'Serbian', ss: 'Swati', su: 'Sundanese', sv: 'Swedish', sw: 'Swahili',
+      ta: 'Tamil', te: 'Telugu', th: 'Thai', tl: 'Tagalog', tn: 'Tswana',
+      tr: 'Turkish', uk: 'Ukrainian', ur: 'Urdu', uz: 'Uzbek', vi: 'Vietnamese',
+      wo: 'Wolof', xh: 'Xhosa', yi: 'Yiddish', yo: 'Yoruba', zh: 'Chinese',
+    };
+
+    const els = {
+      source: document.getElementById('source'),
+      target: document.getElementById('target'),
+      text: document.getElementById('text'),
+      go: document.getElementById('go'),
+      detect: document.getElementById('detect'),
+      swap: document.getElementById('swap'),
+      time: document.getElementById('stat-time'),
+      len: document.getElementById('stat-len'),
+      status: document.getElementById('stat-status'),
+      out: document.getElementById('output'),
+      beam: document.getElementById('beam'),
+      split: document.getElementById('split'),
+      family: document.getElementById('family'),
+      pairsBtn: document.getElementById('loadPairs'),
+      pairs: document.getElementById('pairs'),
+      apiBase: document.getElementById('apiBase'),
+    };
+
+    const API_BASE = location.origin; // same origin
+    els.apiBase.textContent = API_BASE;
+
+    function option(label, value) {
+      const o = document.createElement('option'); o.value = value; o.textContent = label; return o;
+    }
+
+    function fillLangs(list) {
+      els.source.innerHTML = ''; els.target.innerHTML = '';
+      const names = [...list].map(code => ({ code, name: LANG_NAMES[code] || code.toUpperCase() }))
+        .sort((a,b) => a.name.localeCompare(b.name));
+      names.forEach(({code, name}) => {
+        els.source.appendChild(option(`${name} (${code})`, code));
+        els.target.appendChild(option(`${name} (${code})`, code));
+      });
+      // sensible defaults
+      if ([...els.source.options].some(o => o.value === 'en')) els.source.value = 'en';
+      if ([...els.target.options].some(o => o.value === 'de')) els.target.value = 'de';
+    }
+
+    async function getJSON(url, opts) {
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    }
+
+    async function loadLanguages() {
+      try {
+        const data = await getJSON(`${API_BASE}/get_languages`);
+        fillLangs(data.languages || []);
+      } catch (e) {
+        console.error(e);
+        // Fallback common list
+        fillLangs(['en','es','fr','de','it','nl','sv','fi','uk','hi','ar','zh']);
+      }
+    }
+
+    function setStatus(text, color) {
+      els.status.textContent = text; els.status.style.borderColor = color || '#1f2a40'; els.status.style.color = '#e5e7eb';
+    }
+
+    els.swap.addEventListener('click', () => {
+      const s = els.source.value, t = els.target.value; els.source.value = t; els.target.value = s;
+    });
+
+    els.text.addEventListener('input', () => {
+      els.len.textContent = `Chars: ${els.text.value.length}`;
+    });
+
+    els.detect.addEventListener('click', async () => {
+      const text = els.text.value.trim(); if (!text) return;
+      setStatus('Detecting…', '#7dd3fc');
+      try {
+        const data = await getJSON(`${API_BASE}/language_detection?text=${encodeURIComponent(text.slice(0, 5000))}`);
+        setStatus(`Detected: ${LANG_NAMES[data.language] || data.language}`, '#7dd3fc');
+        if ([...els.source.options].some(o => o.value === data.language)) {
+          els.source.value = data.language;
+        }
+      } catch (e) {
+        setStatus('Detection failed', '#ef4444');
+      }
+    });
+
+    els.go.addEventListener('click', async () => {
+      const text = els.text.value.trim(); if (!text) return;
+      const src = els.source.value; const tgt = els.target.value;
+      const beam = Math.max(1, parseInt(els.beam.value || '5', 10));
+      const split = els.split.value === 'true';
+      els.out.textContent = '';
+      setStatus('Translating…', '#22d3ee');
+      const started = performance.now();
+      els.time.textContent = 'Time: —';
+      try {
+        const body = { text, target_lang: tgt, source_lang: src, beam_size: beam, perform_sentence_splitting: split };
+        const res = await fetch(`${API_BASE}/translate`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        const ended = performance.now();
+        const ms = (ended - started);
+        els.time.textContent = `Time: ${(ms/1000).toFixed(2)}s`;
+        if (!res.ok) {
+          setStatus(`Error ${res.status}`, '#ef4444');
+          els.out.textContent = JSON.stringify(json, null, 2);
+          return;
+        }
+        const out = json.translated?.join('\n') || json.translations?.join('\n') || JSON.stringify(json, null, 2);
+        els.out.textContent = out;
+        setStatus('Done', '#10b981');
+      } catch (e) {
+        const ended = performance.now();
+        const ms = (ended - started);
+        els.time.textContent = `Time: ${(ms/1000).toFixed(2)}s`;
+        setStatus('Translation failed', '#ef4444');
+        els.out.textContent = String(e);
+      }
+    });
+
+    els.pairsBtn.addEventListener('click', async () => {
+      const fam = els.family.value;
+      els.pairs.textContent = 'Loading…';
+      try {
+        const data = await getJSON(`${API_BASE}/discover/${fam}`);
+        const pairs = data.language_pairs || [];
+        const sample = pairs.slice(0, 200).map(([s,t]) => `${(LANG_NAMES[s]||s)} → ${(LANG_NAMES[t]||t)} (${s}->${t})`).join('\n');
+        els.pairs.textContent = `${pairs.length} pairs found for ${fam}.\n\n` + sample + (pairs.length>200?'\n…':'');
+      } catch (e) {
+        els.pairs.textContent = 'Failed to load pairs.';
+      }
+    });
+
+    // Init
+    loadLanguages();
+  </script>
+</body>
+</html>

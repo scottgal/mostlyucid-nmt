@@ -6,7 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.config import config
 from src.core.logging import logger
@@ -108,6 +109,14 @@ app = FastAPI(
     version=config.VERSION,
     lifespan=lifespan
 )
+
+# Mount static demo at /demo
+app.mount("/demo", StaticFiles(directory="public", html=True), name="demo")
+
+# Optional: redirect root to /demo
+@app.get("/")
+async def root_redirect():
+    return RedirectResponse(url="/demo/")
 
 
 # Dependency injection functions

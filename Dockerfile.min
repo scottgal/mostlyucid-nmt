@@ -10,7 +10,7 @@ ARG BUILD_DATE
 ARG VCS_REF
 
 # OCI labels for metadata
-LABEL org.opencontainers.image.title="mostlylucid-nmt-min" \
+LABEL org.opencontainers.image.title="mostlylucid-nmt" \
       org.opencontainers.image.description="FastAPI neural machine translation service - CPU minimal, no preloaded models" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
@@ -39,6 +39,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY src/ ./src/
+COPY public/ ./public/
 COPY app.py .
 
 # Create directory for model cache (can be mounted as volume)
