@@ -1,4 +1,4 @@
-﻿# Marian Translator (EasyNMT-compatible API)
+﻿# mostlylucid-nmt (EasyNMT-compatible API)
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/scottgal/mostlylucid-nmt)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 [![cpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu?label=cpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
@@ -620,7 +620,7 @@ Defaults are shown in parentheses.
 - `LOG_LEVEL` = `DEBUG|INFO|WARN|ERROR` (`INFO`)
 - `REQUEST_LOG` = `1|0` (`0`) — per-request logs.
 - `LOG_TO_FILE` = `1|0` (`0`) — enable rotating file logs.
-- `LOG_FILE_PATH` = path (`/var/log/marian-translator/app.log`)
+- `LOG_FILE_PATH` = path (`/var/log/mostlylucid-nmt/app.log`)
 - `LOG_FILE_MAX_BYTES` = int (`10485760`) — 10MB.
 - `LOG_FILE_BACKUP_COUNT` = int (`5`)
 - `LOG_FORMAT` = `plain|json` (`plain`)
@@ -714,7 +714,7 @@ Notes:
   - Set `MODEL_CACHE_DIR=/models` and mount a volume: `-v ./model-cache:/models`
   - Models persist across container restarts and are shared if multiple containers use the same volume.
 - Logs and persistence:
-  - Enable file logs with rotation (`LOG_TO_FILE=1`). Mount a volume at `/var/log/marian-translator` if you need persistence.
+  - Enable file logs with rotation (`LOG_TO_FILE=1`). Mount a volume at `/var/log/mostlylucid-nmt` if you need persistence.
 - `sacremoses` warning:
   - The image includes `sacremoses`; the app also suppresses the warning. If you build custom images, ensure `sacremoses` is installed.
 

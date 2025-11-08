@@ -11,7 +11,7 @@ class Config:
 
     # Application
     VERSION = "1.0.0"
-    TITLE = "Marian Translator API"
+    TITLE = "mostlylucid-nmt"
 
     # Supported language codes (Opus-MT)
     SUPPORTED_LANGS: List[str] = [
@@ -46,7 +46,7 @@ class Config:
     REQUEST_LOG: bool = os.getenv("REQUEST_LOG", "0").lower() in ("1", "true", "yes")
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "plain").lower()  # plain|json
     LOG_TO_FILE: bool = os.getenv("LOG_TO_FILE", "0").lower() in ("1", "true", "yes")
-    LOG_FILE_PATH: str = os.getenv("LOG_FILE_PATH", "/var/log/marian-translator/app.log")
+    LOG_FILE_PATH: str = os.getenv("LOG_FILE_PATH", "/var/log/mostlylucid-nmt/app.log")
     LOG_FILE_MAX_BYTES: int = int(os.getenv("LOG_FILE_MAX_BYTES", "10485760"))  # 10MB
     LOG_FILE_BACKUP_COUNT: int = int(os.getenv("LOG_FILE_BACKUP_COUNT", "5"))
     LOG_INCLUDE_TEXT: bool = os.getenv("LOG_INCLUDE_TEXT", "0").lower() in ("1", "true", "yes")

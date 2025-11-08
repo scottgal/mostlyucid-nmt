@@ -1,3 +1,3 @@
-"""Marian Translator - EasyNMT-compatible translation API."""
+"""mostlylucid-nmt - EasyNMT-compatible translation API."""
 
 __version__ = "1.0.0"

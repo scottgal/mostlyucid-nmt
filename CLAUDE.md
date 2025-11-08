@@ -16,7 +16,7 @@ The codebase has been completely refactored into a modular, tested, and maintain
 ### Directory Structure
 
 ```
-marian-translator/
+mostlylucid-nmt/
 ├── src/                        # Main application package
 │   ├── __init__.py
 │   ├── app.py                  # FastAPI application with lifespan management
@@ -455,7 +455,7 @@ Controlled by: `RETRY_AFTER_MIN_SEC` (1), `RETRY_AFTER_MAX_SEC` (120), `RETRY_AF
 ### Import Errors
 
 If you get `ModuleNotFoundError: No module named 'src'`:
-- Ensure you're running from project root: `cd E:\source\marian-translator`
+- Ensure you're running from project root: `cd E:\source\mostlylucid-nmt`
 - Run with module mode: `python -m pytest` or `python -m uvicorn src.app:app`
 - Or set PYTHONPATH: `export PYTHONPATH=.` (Linux/Mac) or `set PYTHONPATH=.` (Windows)
 
@@ -562,7 +562,7 @@ Models auto-load from Hugging Face. To update:
 Automatic via `RotatingFileHandler` when `LOG_TO_FILE=1`:
 - Max size: `LOG_FILE_MAX_BYTES` (10MB)
 - Backups: `LOG_FILE_BACKUP_COUNT` (5)
-- Files: `/var/log/marian-translator/app.log`, `.log.1`, `.log.2`, etc.
+- Files: `/var/log/mostlylucid-nmt/app.log`, `.log.1`, `.log.2`, etc.
 
 ### Monitoring
 
