@@ -248,6 +248,62 @@
       }
     });
 
+    // Chunk text into smaller pieces for API
+    function chunkText(text, maxChunkSize = 1000) {
+      // Split by paragraphs (double newline) or single newline
+      const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+      const chunks = [];
+      let currentChunk = [];
+      let currentLength = 0;
+
+      for (const para of paragraphs) {
+        const paraLength = para.length;
+
+        // If single paragraph exceeds max size, split by sentences
+        if (paraLength > maxChunkSize) {
+          // Flush current chunk if any
+          if (currentChunk.length > 0) {
+            chunks.push(currentChunk.join('\n\n'));
+            currentChunk = [];
+            currentLength = 0;
+          }
+
+          // Split long paragraph by sentences
+          const sentences = para.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+          for (const sent of sentences) {
+            if (currentLength + sent.length > maxChunkSize && currentChunk.length > 0) {
+              chunks.push(currentChunk.join(' '));
+              currentChunk = [];
+              currentLength = 0;
+            }
+            currentChunk.push(sent);
+            currentLength += sent.length;
+          }
+
+          if (currentChunk.length > 0) {
+            chunks.push(currentChunk.join(' '));
+            currentChunk = [];
+            currentLength = 0;
+          }
+        } else if (currentLength + paraLength > maxChunkSize && currentChunk.length > 0) {
+          // Current paragraph would exceed limit, flush chunk
+          chunks.push(currentChunk.join('\n\n'));
+          currentChunk = [para];
+          currentLength = paraLength;
+        } else {
+          currentChunk.push(para);
+          currentLength += paraLength;
+        }
+      }
+
+      // Add remaining chunk
+      if (currentChunk.length > 0) {
+        chunks.push(currentChunk.join('\n\n'));
+      }
+
+      return chunks.filter(c => c.trim());
+    }
+
     els.go.addEventListener('click', async () => {
       const text = els.text.value.trim(); if (!text) return;
       const src = els.source.value; const tgt = els.target.value;
@@ -257,23 +313,45 @@
       setStatus('Translating…', '#22d3ee');
       const started = performance.now();
       els.time.textContent = 'Time: —';
+
       try {
-        const body = { text, target_lang: tgt, source_lang: src, beam_size: beam, perform_sentence_splitting: split };
-        const res = await fetch(`${API_BASE}/translate`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-        });
-        const json = await res.json();
+        // Chunk the text for large inputs
+        const chunks = chunkText(text, 1000);
+        const totalChunks = chunks.length;
+
+        if (totalChunks > 1) {
+          setStatus(`Translating ${totalChunks} chunks…`, '#22d3ee');
+        }
+
+        const translations = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+          if (totalChunks > 1) {
+            setStatus(`Translating chunk ${i+1}/${totalChunks}…`, '#22d3ee');
+          }
+
+          const body = { text: [chunks[i]], target_lang: tgt, source_lang: src, beam_size: beam, perform_sentence_splitting: split };
+          const res = await fetch(`${API_BASE}/translate`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+          });
+          const json = await res.json();
+
+          if (!res.ok) {
+            setStatus(`Error ${res.status} on chunk ${i+1}`, '#ef4444');
+            els.out.textContent = JSON.stringify(json, null, 2);
+            return;
+          }
+
+          const translated = json.translated?.[0] || json.translations?.[0] || '';
+          translations.push(translated);
+        }
+
         const ended = performance.now();
         const ms = (ended - started);
         els.time.textContent = `Time: ${(ms/1000).toFixed(2)}s`;
-        if (!res.ok) {
-          setStatus(`Error ${res.status}`, '#ef4444');
-          els.out.textContent = JSON.stringify(json, null, 2);
-          return;
-        }
-        const out = json.translated?.join('\n') || json.translations?.join('\n') || JSON.stringify(json, null, 2);
-        els.out.textContent = out;
-        setStatus('Done', '#10b981');
+
+        els.out.textContent = translations.join('\n\n');
+        setStatus(`Done (${totalChunks} chunk${totalChunks>1?'s':''})`, '#10b981');
       } catch (e) {
         const ended = performance.now();
         const ms = (ended - started);

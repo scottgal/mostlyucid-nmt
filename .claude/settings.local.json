@@ -19,7 +19,8 @@
       "Bash(xxd:*)",
       "Bash(powershell -ExecutionPolicy Bypass -Command \"Get-Command -Syntax { . .\\build-all.ps1 }\")",
       "Bash(docker ps:*)",
-      "Bash(docker rm:*)"
+      "Bash(docker rm:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
