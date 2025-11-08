@@ -1,0 +1,48 @@
+﻿# Dockerfile.gpu — GPU-enabled image using CUDA runtime
+# Build example:
+#   docker build -f Dockerfile.gpu -t mostlylucid-nmt:gpu .
+# Run example (requires NVIDIA Container Toolkit):
+#   docker run --gpus all -e USE_GPU=true -e PRELOAD_MODELS="en->de,de->en" -p 24080:8000 mostlylucid-nmt:gpu
+
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        build-essential \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt ./
+
+# Install Python deps from requirements first (will install CPU torch, then we upgrade to CUDA wheel)
+RUN pip3 install -r requirements.txt
+
+# Install CUDA-enabled PyTorch matching CUDA 12.1
+# See https://pytorch.org for the latest index URL mapping
+RUN pip3 install --upgrade --index-url https://download.pytorch.org/whl/cu121 torch
+
+COPY app.py ./
+
+EXPOSE 8000
+
+# Common runtime envs:
+# - USE_GPU=true|false|auto (default auto)
+# - DEVICE=auto|cpu|cuda|cuda:0 (overrides USE_GPU when set)
+# - PRELOAD_MODELS="en->de,de->en,fr->en" (preload at startup)
+# - MAX_CACHED_MODELS=6 (LRU capacity)
+
+# Ensure fast, graceful shutdown inside the container
+STOPSIGNAL SIGTERM
+
+# Exec so Gunicorn is PID 1 and receives signals directly; set shorter graceful timeouts
+CMD ["bash", "-lc", "exec gunicorn -k uvicorn.workers.UvicornWorker -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:8000 --timeout ${TIMEOUT:-60} --graceful-timeout ${GRACEFUL_TIMEOUT:-20} --keepalive ${KEEP_ALIVE:-5} app:app"]
