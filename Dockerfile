@@ -1,6 +1,23 @@
-# Dockerfile
-# Build: docker build -t mostlylucid-nmt .
+# Dockerfile - CPU production image with preloaded models
+# Build: docker build -t scottgal/mostlylucid-nmt:latest --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
 FROM python:3.11-slim
+
+# Build arguments for versioning
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG VCS_REF
+
+# OCI labels for metadata
+LABEL org.opencontainers.image.title="mostlylucid-nmt" \
+      org.opencontainers.image.description="FastAPI neural machine translation service - CPU with preloaded models" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/scottgal/mostlylucid-nmt" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.vendor="scottgal" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.documentation="https://github.com/scottgal/mostlylucid-nmt/blob/main/README.md" \
+      variant="cpu-full"
 
 # Prevent interactive prompts and reduce image size
 ENV DEBIAN_FRONTEND=noninteractive \

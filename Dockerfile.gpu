@@ -1,10 +1,27 @@
-﻿# Dockerfile.gpu — GPU-enabled image using CUDA runtime
+# Dockerfile.gpu — GPU-enabled image using CUDA runtime with preloaded models
 # Build example:
-#   docker build -f Dockerfile.gpu -t mostlylucid-nmt:gpu .
+#   docker build -f Dockerfile.gpu -t scottgal/mostlylucid-nmt:gpu --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
 # Run example (requires NVIDIA Container Toolkit):
-#   docker run --gpus all -e USE_GPU=true -e PRELOAD_MODELS="en->de,de->en" -p 24080:8000 mostlylucid-nmt:gpu
+#   docker run --gpus all -e USE_GPU=true -e PRELOAD_MODELS="en->de,de->en" -p 8000:8000 scottgal/mostlylucid-nmt:gpu
 
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+# Build arguments for versioning
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG VCS_REF
+
+# OCI labels for metadata
+LABEL org.opencontainers.image.title="mostlylucid-nmt-gpu" \
+      org.opencontainers.image.description="FastAPI neural machine translation service - GPU with CUDA 12.1 and preloaded models" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/scottgal/mostlylucid-nmt" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.vendor="scottgal" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.documentation="https://github.com/scottgal/mostlylucid-nmt/blob/main/README.md" \
+      variant="gpu-full"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \

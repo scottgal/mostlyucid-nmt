@@ -135,6 +135,10 @@ docker run -p 8000:8000 ^
   - [`/model_name`](#model_name)
   - [Model Discovery](#model-discovery)
   - [Health/Observability](#healthobservability)
+- [Building from Source](#building-from-source)
+  - [Quick Build](#quick-build)
+  - [Versioning Strategy](#versioning-strategy)
+  - [Publishing](#publishing)
 - [Configuration (Environment Variables)](#configuration-environment-variables)
   - [Device Selection](#device-selection)
   - [Model & Cache](#model--cache)
@@ -491,6 +495,50 @@ Response:
 - `GET /healthz` → `{ "status": "ok" }`
 - `GET /readyz` → readiness with device and queue settings
 - `GET /cache` → LRU cache status (capacity/size/keys/device) and queue configuration
+
+
+## Building from Source
+
+All 4 Docker image variants include proper versioning and OCI labels for tracking.
+
+### Quick Build
+
+**Windows PowerShell:**
+```powershell
+.\build-all.ps1
+```
+
+**Linux/Mac:**
+```bash
+chmod +x build-all.sh
+./build-all.sh
+```
+
+This builds all 4 variants with automatic datetime versioning (format: `YYYYMMDD.HHMMSS`).
+
+### Versioning Strategy
+
+Each build creates **two tags** per variant:
+- **Named tag**: `latest`, `min`, `gpu`, `gpu-min` (always latest)
+- **Version tag**: Immutable snapshot (e.g., `20250108.143022` or `min-20250108.143022`)
+
+Example:
+```bash
+# Always get latest
+docker pull scottgal/mostlylucid-nmt:latest
+
+# Pin to specific version
+docker pull scottgal/mostlylucid-nmt:20250108.143022
+```
+
+### Publishing
+
+After building, push to Docker Hub:
+```bash
+docker push scottgal/mostlylucid-nmt --all-tags
+```
+
+For detailed build instructions, versioning strategy, and CI/CD integration, see **[BUILD.md](BUILD.md)**.
 
 
 ## Configuration (Environment Variables)

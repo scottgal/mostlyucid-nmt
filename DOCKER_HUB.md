@@ -23,15 +23,27 @@ All variants are available in this single repository as different tags:
 ### Pulling Images
 
 ```bash
-# Pull specific tag
+# Pull specific tag (always latest)
 docker pull scottgal/mostlylucid-nmt:latest
 docker pull scottgal/mostlylucid-nmt:min
 docker pull scottgal/mostlylucid-nmt:gpu
 docker pull scottgal/mostlylucid-nmt:gpu-min
 
+# Pull specific version (pinned)
+docker pull scottgal/mostlylucid-nmt:20250108.143022
+docker pull scottgal/mostlylucid-nmt:min-20250108.143022
+
 # Or just run (auto-pulls if not present)
 docker run scottgal/mostlylucid-nmt:gpu
 ```
+
+### Versioning
+
+Each image includes two types of tags:
+- **Named tags**: `latest`, `min`, `gpu`, `gpu-min` (always point to most recent build)
+- **Version tags**: Immutable snapshots with datetime format `YYYYMMDD.HHMMSS` (e.g., `20250108.143022`)
+
+All images include OCI labels with version, build date, git commit, and variant information.
 
 ## Supported Model Families
 
