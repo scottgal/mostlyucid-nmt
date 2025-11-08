@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All badges updated to show 4 variants: cpu, cpu-min, gpu, gpu-min
 - GitHub Actions now automatically syncs DOCKER_HUB.md to Docker Hub repository page
 
+### Added
+- **Comprehensive test suite** to prevent regression:
+  - `test_app_startup.py`: Tests FastAPI app initialization, route registration, OpenAPI schema generation
+  - `test_route_parameters.py`: Validates query parameter types, catches Optional[List[...]] issues
+  - `test_docker_config.py`: Validates Dockerfile syntax, gunicorn arguments, OCI labels
+
 ## [2.0.0] - 2025-01-08
 
 ### Added
