@@ -3,21 +3,20 @@
 import time
 import uuid
 import asyncio
-from typing import List, Union, Optional
+from typing import List, Union, Optional, TYPE_CHECKING
 
-from fastapi import APIRouter, Query, Request, HTTPException
+from fastapi import Request, HTTPException
 
 from src.config import config
 from src.models import TranslatePostBody, TranslateResponse, TranslatePostResponse
 from src.core.logging import logger
-from src.services.translation_service import TranslationService
 from src.services.language_detection import language_detector
 from src.services.queue_manager import acquire_translate_slot, queue_manager
 from src.exceptions import QueueOverflowError, ServiceBusyError, UnsupportedLanguagePairError
 from src.utils.text_processing import is_noise
 
-
-router = APIRouter()
+if TYPE_CHECKING:
+    from src.services.translation_service import TranslationService
 
 
 def _normalize_texts(text: Union[str, List[str]]) -> List[str]:
@@ -67,28 +66,14 @@ def _get_effective_beam_size(beam_size: int) -> int:
     return eff_beam
 
 
-@router.get(
-    "/translate",
-    response_model=TranslateResponse,
-    summary="Translate",
-    description=(
-        "Translates the text to the given target language.\n"
-        ":param text: Text that should be translated\n"
-        ":param target_lang: Target language\n"
-        ":param source_lang: Language of text. Optional, if empty: Automatic language detection\n"
-        ":param beam_size: Beam size. Optional\n"
-        ":param perform_sentence_splitting: Split longer documents into individual sentences for translation. Optional\n"
-        ":return: Returns a json with the translated text"
-    )
-)
 async def translate_get(
     request: Request,
-    translation_service: TranslationService,
-    target_lang: str = Query(..., alias="target_lang"),
-    text: List[str] = Query(default=[], alias="text"),
-    source_lang: str = Query(default="", alias="source_lang"),
-    beam_size: int = Query(default=5, alias="beam_size"),
-    perform_sentence_splitting: bool = Query(default=True, alias="perform_sentence_splitting"),
+    translation_service: "TranslationService",
+    target_lang: str,
+    text: List[str],
+    source_lang: str,
+    beam_size: int,
+    perform_sentence_splitting: bool,
 ):
     """GET endpoint for translation."""
     req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
@@ -168,16 +153,10 @@ async def translate_get(
     return TranslateResponse(translations=texts)
 
 
-@router.post(
-    "/translate",
-    response_model=TranslatePostResponse,
-    summary="Translate Post",
-    description="Post method for translation\n:return:"
-)
 async def translate_post(
     request: Request,
     body: TranslatePostBody,
-    translation_service: TranslationService
+    translation_service: "TranslationService"
 ):
     """POST endpoint for translation."""
     req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())

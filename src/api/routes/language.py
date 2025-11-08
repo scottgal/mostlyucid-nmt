@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional, Union, List, Dict
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 from src.config import config
 from src.models import (
@@ -64,15 +64,6 @@ async def get_languages(
     return LanguagesResponse(languages=languages)
 
 
-@router.get(
-    "/language_detection",
-    response_model=LanguageDetectionResponse,
-    summary="Language Detection",
-    description=(
-        "Detects the language for the provided text\n"
-        ":param text: A single text for which we want to know the language\n:return: The detected language"
-    )
-)
 async def language_detection_get(
     text: str,
     frontend_executor: ThreadPoolExecutor
@@ -87,14 +78,6 @@ async def language_detection_get(
     return LanguageDetectionResponse(language=lang)
 
 
-@router.post(
-    "/language_detection",
-    summary="Language Detection Post",
-    description=(
-        "Pass a json that has a 'text' key. The 'text' element can either be a string, a list of strings, or\n"
-        "a dict.\n:return: Languages detected"
-    )
-)
 async def language_detection_post(
     body: LanguageDetectionPostBody,
     frontend_executor: ThreadPoolExecutor
