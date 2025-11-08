@@ -1,6 +1,6 @@
 """Translation service with robust error handling and processing pipeline."""
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
@@ -68,7 +68,7 @@ class TranslationService:
         eff_beam: int,
         perform_sentence_splitting: bool,
         translator_direct: Optional[any] = None
-    ) -> str:
+    ) -> Tuple[str, bool]:
         """Translate a single text item.
 
         Args:
@@ -80,10 +80,10 @@ class TranslationService:
             translator_direct: Pre-loaded translator or None
 
         Returns:
-            Translated text or placeholder if failed
+            Tuple of (translated text or placeholder if failed, pivot_used flag)
         """
         if config.INPUT_SANITIZE and is_noise(txt):
-            return config.SANITIZE_PLACEHOLDER
+            return (config.SANITIZE_PLACEHOLDER, False)
 
         gen_max_len = 512
         if config.EASYNMT_MAX_TEXT_LEN_INT is not None:
@@ -98,19 +98,19 @@ class TranslationService:
                 out = self._translate_with_translator(translator, chunks, eff_beam)
                 combined = config.JOIN_SENTENCES_WITH.join(out)
                 combined = remove_repeating_new_symbols(txt, combined)
-                return combined
+                return (combined, False)
             else:
                 res = translator([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                 base = res[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
                 base = remove_repeating_new_symbols(txt, base)
-                return base
+                return (base, False)
 
         except Exception as direct_err:
             # Attempt pivot fallback if enabled
             if not config.PIVOT_FALLBACK or config.PIVOT_LANG in (src, tgt):
                 if config.REQUEST_LOG:
                     logger.warning(f"Direct translate failed (no pivot): {direct_err}")
-                return config.SANITIZE_PLACEHOLDER
+                return (config.SANITIZE_PLACEHOLDER, False)
 
             try:
                 trans_src_pivot = model_manager.get_pipeline(src, config.PIVOT_LANG)
@@ -128,7 +128,7 @@ class TranslationService:
 
                     combined = config.JOIN_SENTENCES_WITH.join(final)
                     combined = remove_repeating_new_symbols(txt, combined)
-                    return combined
+                    return (combined, True)
                 else:
                     mid = trans_src_pivot([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                     mid_txt = mid[0].get("translation_text", "")
@@ -136,12 +136,12 @@ class TranslationService:
                     fin = trans_pivot_tgt([mid_txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                     base = fin[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
                     base = remove_repeating_new_symbols(txt, base)
-                    return base
+                    return (base, True)
 
             except Exception as pivot_err:
                 if config.REQUEST_LOG:
                     logger.warning(f"Pivot translate failed: {pivot_err}")
-                return config.SANITIZE_PLACEHOLDER
+                return (config.SANITIZE_PLACEHOLDER, False)
 
     def translate_texts_aligned(
         self,
@@ -150,7 +150,7 @@ class TranslationService:
         tgt: str,
         eff_beam: int,
         perform_sentence_splitting: bool
-    ) -> List[str]:
+    ) -> Tuple[List[str], bool]:
         """Translate list of texts while preserving alignment.
 
         Args:
@@ -161,9 +161,10 @@ class TranslationService:
             perform_sentence_splitting: Whether to split sentences
 
         Returns:
-            List of translations (same length as input)
+            Tuple of (list of translations (same length as input), pivot_used flag)
         """
         outputs: List[str] = []
+        pivot_used = False
 
         # Try to load direct translator once
         translator_direct = None
@@ -173,21 +174,24 @@ class TranslationService:
             # We will use pivot per-item if available
             if config.REQUEST_LOG:
                 logger.warning(f"Loading direct pipeline failed; will pivot per item if possible: {e}")
+            pivot_used = True  # Direct pipeline not available
 
         for t in input_texts:
             try:
                 txt = t if isinstance(t, str) else ""
-                translated = self._translate_text_single(
+                translated, item_pivot_used = self._translate_text_single(
                     txt, src, tgt, eff_beam, perform_sentence_splitting,
                     translator_direct=translator_direct
                 )
+                if item_pivot_used:
+                    pivot_used = True
                 outputs.append(translated if isinstance(translated, str) else config.SANITIZE_PLACEHOLDER)
             except Exception as e:
                 if config.REQUEST_LOG:
                     logger.warning(f"Per-item translation failed, inserting placeholder: {e}")
                 outputs.append(config.SANITIZE_PLACEHOLDER)
 
-        return outputs
+        return (outputs, pivot_used)
 
     async def translate_async(
         self,
@@ -196,7 +200,7 @@ class TranslationService:
         tgt: str,
         beam_size: int,
         perform_sentence_splitting: bool
-    ) -> List[str]:
+    ) -> Tuple[List[str], bool]:
         """Asynchronously translate texts using thread pool.
 
         Args:
@@ -207,7 +211,7 @@ class TranslationService:
             perform_sentence_splitting: Whether to split sentences
 
         Returns:
-            List of translations
+            Tuple of (list of translations, pivot_used flag)
         """
         loop = asyncio.get_event_loop()
 

@@ -34,6 +34,7 @@ class TranslateResponse(BaseModel):
     """Response for GET /translate endpoint."""
 
     translations: List[str] = Field(..., description="Translated texts")
+    pivot_path: Union[str, None] = Field(default=None, description="Pivot translation path if used (e.g., 'ja->en->de')")
 
 
 class TranslatePostResponse(BaseModel):
@@ -43,6 +44,7 @@ class TranslatePostResponse(BaseModel):
     source_lang: str = Field(..., description="Detected or provided source language code")
     translated: List[str] = Field(..., description="Translated texts")
     translation_time: float = Field(..., description="Translation duration in seconds")
+    pivot_path: Union[str, None] = Field(default=None, description="Pivot translation path if used (e.g., 'ja->en->de')")
 
 
 class LanguageDetectionPostBody(BaseModel):

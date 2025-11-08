@@ -331,18 +331,6 @@
       els.time.textContent = 'Time: —';
 
       try {
-        // Check if this might use pivot translation
-        const supportedLangs = await getJSON(`${API_BASE}/get_languages`);
-        const isPivotLikely = src && supportedLangs.languages &&
-          !supportedLangs.languages.includes(src) && src !== '';
-
-        if (isPivotLikely) {
-          const srcName = LANG_NAMES[src] || src.toUpperCase();
-          const tgtName = LANG_NAMES[tgt] || tgt.toUpperCase();
-          els.pivotInfo.style.display = 'block';
-          els.pivotText.textContent = `${srcName} → English → ${tgtName} (direct pair not available)`;
-        }
-
         // Chunk the text for large inputs
         const chunks = chunkText(text, 1000);
         const totalChunks = chunks.length;
@@ -368,6 +356,18 @@
             setStatus(`Error ${res.status} on chunk ${i+1}`, '#ef4444');
             els.out.textContent = JSON.stringify(json, null, 2);
             return;
+          }
+
+          // Check for pivot_path in response
+          if (json.pivot_path && i === 0) {
+            // Show pivot info from first chunk
+            const path = json.pivot_path;
+            const parts = path.split('->');
+            const srcName = LANG_NAMES[parts[0]] || parts[0].toUpperCase();
+            const pivotName = LANG_NAMES[parts[1]] || parts[1].toUpperCase();
+            const tgtName = LANG_NAMES[parts[2]] || parts[2].toUpperCase();
+            els.pivotInfo.style.display = 'block';
+            els.pivotText.textContent = `${srcName} → ${pivotName} → ${tgtName}`;
           }
 
           const translated = json.translated?.[0] || json.translations?.[0] || '';

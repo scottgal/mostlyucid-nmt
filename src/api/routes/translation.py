@@ -12,7 +12,7 @@ from src.models import TranslatePostBody, TranslateResponse, TranslatePostRespon
 from src.core.logging import logger
 from src.services.language_detection import language_detector
 from src.services.queue_manager import acquire_translate_slot, queue_manager
-from src.exceptions import QueueOverflowError, ServiceBusyError, UnsupportedLanguagePairError
+from src.exceptions import QueueOverflowError, ServiceBusyError
 from src.utils.text_processing import is_noise
 
 if TYPE_CHECKING:
@@ -34,21 +34,6 @@ def _normalize_texts(text: Union[str, List[str]]) -> List[str]:
         return [text]
     else:
         return []
-
-
-def _validate_language_pair(src: str, tgt: str) -> None:
-    """Validate language pair is supported.
-
-    Args:
-        src: Source language code
-        tgt: Target language code
-
-    Raises:
-        UnsupportedLanguagePairError: If pair is invalid
-    """
-    supported_langs = config.get_supported_langs()
-    if src not in supported_langs or tgt not in supported_langs or src == tgt:
-        raise UnsupportedLanguagePairError(src, tgt)
 
 
 def _get_effective_beam_size(beam_size: int) -> int:
@@ -96,29 +81,21 @@ async def translate_get(
         ""
     )
     src = source_lang or language_detector.detect_language(first_non_noise)
-
-    try:
-        _validate_language_pair(src, target_lang)
-    except UnsupportedLanguagePairError as e:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Unsupported language pair", "src": e.source_lang, "tgt": e.target_lang}
-        )
-
     eff_beam = _get_effective_beam_size(beam_size)
 
     start_t = time.perf_counter()
     texts = []
+    pivot_used = False
 
     try:
         async with await acquire_translate_slot():
             if config.TRANSLATE_TIMEOUT_SEC > 0:
-                texts = await asyncio.wait_for(
+                texts, pivot_used = await asyncio.wait_for(
                     translation_service.translate_async(base_texts, src, target_lang, eff_beam, perform_sentence_splitting),
                     timeout=config.TRANSLATE_TIMEOUT_SEC
                 )
             else:
-                texts = await translation_service.translate_async(
+                texts, pivot_used = await translation_service.translate_async(
                     base_texts, src, target_lang, eff_beam, perform_sentence_splitting
                 )
 
@@ -150,7 +127,11 @@ async def translate_get(
     if config.REQUEST_LOG:
         logger.info(f"{req_id} translate_get done items={len(texts)}")
 
-    return TranslateResponse(translations=texts)
+    pivot_path = None
+    if pivot_used:
+        pivot_path = f"{src}->{config.PIVOT_LANG}->{target_lang}"
+
+    return TranslateResponse(translations=texts, pivot_path=pivot_path)
 
 
 async def translate_post(
@@ -185,29 +166,21 @@ async def translate_post(
     src = body.source_lang or language_detector.detect_language(
         next((t for t in base_texts if t and (not config.INPUT_SANITIZE or not is_noise(t))), "")
     )
-
-    try:
-        _validate_language_pair(src, body.target_lang)
-    except UnsupportedLanguagePairError as e:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Unsupported language pair", "src": e.source_lang, "tgt": e.target_lang}
-        )
-
     eff_beam = _get_effective_beam_size(body.beam_size)
 
     start_t = time.perf_counter()
     texts = []
+    pivot_used = False
 
     try:
         async with await acquire_translate_slot():
             if config.TRANSLATE_TIMEOUT_SEC > 0:
-                texts = await asyncio.wait_for(
+                texts, pivot_used = await asyncio.wait_for(
                     translation_service.translate_async(base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting),
                     timeout=config.TRANSLATE_TIMEOUT_SEC
                 )
             else:
-                texts = await translation_service.translate_async(
+                texts, pivot_used = await translation_service.translate_async(
                     base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting
                 )
 
@@ -242,9 +215,14 @@ async def translate_post(
     if config.REQUEST_LOG:
         logger.info(f"{req_id} translate_post done items={len(texts)} dt={duration_sec:.3f}s")
 
+    pivot_path = None
+    if pivot_used:
+        pivot_path = f"{src}->{config.PIVOT_LANG}->{body.target_lang}"
+
     return TranslatePostResponse(
         target_lang=body.target_lang,
         source_lang=src,
         translated=texts,
-        translation_time=float(duration_sec)
+        translation_time=float(duration_sec),
+        pivot_path=pivot_path
     )
