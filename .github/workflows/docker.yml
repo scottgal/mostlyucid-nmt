@@ -114,7 +114,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt
           readme-filepath: ./DOCKER_HUB.md
-          short-description: "FastAPI neural machine translation service with Opus-MT, mBART50, and M2M100 support. CPU & GPU variants available."
+          short-description: "FastAPI neural machine translation service with Opus-MT, mBART50, and M2M100 support. CPU & GPU , minimal variants available."
 
       - name: Image summary
         if: github.event_name != 'pull_request'
