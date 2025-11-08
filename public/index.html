@@ -113,6 +113,9 @@
       <div class="card">
         <div class="card-body">
           <h2>Output</h2>
+          <div id="pivot-info" class="muted" style="margin-bottom:10px; display:none">
+            <span style="color:#fbbf24">⚡ Pivot translation:</span> <span id="pivot-text"></span>
+          </div>
           <div id="output" class="output"></div>
           <div class="space"></div>
           <h2>Model Families</h2>
@@ -183,6 +186,8 @@
       pairsBtn: document.getElementById('loadPairs'),
       pairs: document.getElementById('pairs'),
       apiBase: document.getElementById('apiBase'),
+      pivotInfo: document.getElementById('pivot-info'),
+      pivotText: document.getElementById('pivot-text'),
     };
 
     const API_BASE = location.origin; // same origin
@@ -203,6 +208,16 @@
       // sensible defaults
       if ([...els.source.options].some(o => o.value === 'en')) els.source.value = 'en';
       if ([...els.target.options].some(o => o.value === 'de')) els.target.value = 'de';
+    }
+
+    // Add language to source dropdown if not already present
+    function addLanguageToSource(code) {
+      if (![...els.source.options].some(o => o.value === code)) {
+        const name = LANG_NAMES[code] || code.toUpperCase();
+        const opt = option(`${name} (${code}) [detected]`, code);
+        els.source.appendChild(opt);
+      }
+      els.source.value = code;
     }
 
     async function getJSON(url, opts) {
@@ -239,10 +254,10 @@
       setStatus('Detecting…', '#7dd3fc');
       try {
         const data = await getJSON(`${API_BASE}/language_detection?text=${encodeURIComponent(text.slice(0, 5000))}`);
-        setStatus(`Detected: ${LANG_NAMES[data.language] || data.language}`, '#7dd3fc');
-        if ([...els.source.options].some(o => o.value === data.language)) {
-          els.source.value = data.language;
-        }
+        const langName = LANG_NAMES[data.language] || data.language;
+        setStatus(`Detected: ${langName} (set as source)`, '#10b981');
+        // Add to source dropdown and select it, even if not in standard list
+        addLanguageToSource(data.language);
       } catch (e) {
         setStatus('Detection failed', '#ef4444');
       }
@@ -310,11 +325,24 @@
       const beam = Math.max(1, parseInt(els.beam.value || '5', 10));
       const split = els.split.value === 'true';
       els.out.textContent = '';
+      els.pivotInfo.style.display = 'none';
       setStatus('Translating…', '#22d3ee');
       const started = performance.now();
       els.time.textContent = 'Time: —';
 
       try {
+        // Check if this might use pivot translation
+        const supportedLangs = await getJSON(`${API_BASE}/get_languages`);
+        const isPivotLikely = src && supportedLangs.languages &&
+          !supportedLangs.languages.includes(src) && src !== '';
+
+        if (isPivotLikely) {
+          const srcName = LANG_NAMES[src] || src.toUpperCase();
+          const tgtName = LANG_NAMES[tgt] || tgt.toUpperCase();
+          els.pivotInfo.style.display = 'block';
+          els.pivotText.textContent = `${srcName} → English → ${tgtName} (direct pair not available)`;
+        }
+
         // Chunk the text for large inputs
         const chunks = chunkText(text, 1000);
         const totalChunks = chunks.length;
