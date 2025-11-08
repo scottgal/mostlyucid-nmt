@@ -184,27 +184,28 @@ curl http://localhost:8000/model_name
 
 ## CI/CD Integration
 
-For automated builds in CI/CD pipelines:
+### GitHub Actions Workflow
 
-**GitHub Actions Example:**
-```yaml
-- name: Build and Push Docker Images
-  run: |
-    VERSION=$(date -u +"%Y%m%d.%H%M%S")
-    BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    VCS_REF=${{ github.sha }}
+This repository includes a complete GitHub Actions workflow at `.github/workflows/docker.yml` that:
+- Builds all 4 variants (cpu, cpu-min, gpu, gpu-min)
+- Pushes to **ONE repository** (`scottgal/mostlylucid-nmt`) with different tags
+- Creates version tags with datetime stamps
+- Publishes to both Docker Hub and GitHub Container Registry
 
-    docker build \
-      --build-arg VERSION="${VERSION}" \
-      --build-arg BUILD_DATE="${BUILD_DATE}" \
-      --build-arg VCS_REF="${VCS_REF}" \
-      -t scottgal/mostlylucid-nmt:cpu \
-      -t scottgal/mostlylucid-nmt:latest \
-      -t scottgal/mostlylucid-nmt:cpu-${VERSION} \
-      .
+**Key features:**
+- Matrix build strategy for parallel builds
+- Automatic versioning with `YYYYMMDD.HHMMSS` format
+- OCI labels with version, build date, and git commit
+- Proper tag structure: `:cpu`, `:cpu-min`, `:gpu`, `:gpu-min`, `:latest`
+- Version tags: `:cpu-20250108.143022`, `:gpu-20250108.143022`, etc.
+- **Auto-sync Docker Hub README**: DOCKER_HUB.md automatically pushed to Docker Hub repository page
 
-    docker push scottgal/mostlylucid-nmt --all-tags
-```
+**Triggered on:**
+- Push to `main` or `master` branch
+- Version tags (`v*.*.*`)
+- Pull requests (build only, no push)
+
+See the workflow file for complete implementation details.
 
 ## Multi-Architecture Builds
 
@@ -253,4 +254,4 @@ Wait a few minutes after pushing - Docker Hub may cache the manifest. Clear your
 2. **Never overwrite version tags** - they should be immutable
 3. **Test locally** before pushing to Docker Hub
 4. **Document releases** - create GitHub releases for major versions
-5. **Keep named tags updated** - `latest`, `min`, `gpu`, `gpu-min` should always point to most recent stable build
+5. **Keep named tags updated** - `:latest`, `:cpu`, `:cpu-min`, `:gpu`, `:gpu-min` should always point to most recent stable build

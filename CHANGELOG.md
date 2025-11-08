@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Added `--break-system-packages` flag to pip installs in GPU Dockerfiles for Ubuntu 24.04 compatibility (PEP 668)
 - Fixed OCI image titles: All Dockerfiles now use same `org.opencontainers.image.title="mostlylucid-nmt"` to ensure all images go to ONE Docker Hub repository with different tags (previously used hyphened names that could cause confusion)
+- **CRITICAL**: Fixed GitHub Actions CI/CD workflow to push all variants to ONE repository (`scottgal/mostlylucid-nmt`) with different tags (`:cpu`, `:cpu-min`, `:gpu`, `:gpu-min`) instead of creating separate repositories with hyphens (`mostlylucid-nmt-gpu`)
 
 ### Changed
 - **Tag structure updated**: All images now use clearer tag names
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated all documentation references from CUDA 12.1 to CUDA 12.6
 - PyTorch installation now uses CUDA 12.4 wheels (cu124 index)
 - All badges updated to show 4 variants: cpu, cpu-min, gpu, gpu-min
+- GitHub Actions now automatically syncs DOCKER_HUB.md to Docker Hub repository page
 
 ## [2.0.0] - 2025-01-08
 

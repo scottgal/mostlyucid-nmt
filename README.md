@@ -73,12 +73,12 @@ MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"
 ### 4. Minimal Docker Images - NEW!
 **Smaller images with volume-mapped model caching:**
 
-| Image | Size | Models | Best For |
-|-------|------|--------|----------|
-| `scottgal/mostlylucid-nmt:cpu` (or `:latest`) | ~2.5GB | Preloaded | Production CPU |
-| `scottgal/mostlylucid-nmt:cpu-min` | ~1.5GB | None (on-demand) | Flexible CPU deployment |
-| `scottgal/mostlylucid-nmt:gpu` | ~5GB | Preloaded | Production GPU |
-| `scottgal/mostlylucid-nmt:gpu-min` | ~4GB | None (on-demand) | Flexible GPU deployment |
+| Tag | Full Image Name | Size | Description | Use Case |
+|-----|-----------------|------|-------------|----------|
+| `cpu` (or `latest`) | `scottgal/mostlylucid-nmt:cpu` | ~2.5GB | CPU with source code | Production CPU deployments |
+| `cpu-min` | `scottgal/mostlylucid-nmt:cpu-min` | ~1.5GB | CPU minimal, no preloaded models | Volume-mapped cache, flexible |
+| `gpu` | `scottgal/mostlylucid-nmt:gpu` | ~5GB | GPU with CUDA 12.6 + source | Production GPU deployments |
+| `gpu-min` | `scottgal/mostlylucid-nmt:gpu-min` | ~4GB | GPU minimal, no preloaded models | GPU with volume-mapped cache |
 
 **Benefits:**
 - ✅ Smaller image sizes

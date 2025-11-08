@@ -1,4 +1,4 @@
-﻿name: Build and Push Docker Images
+name: Build and Push Docker Images
 
 on:
   push:
@@ -19,18 +19,26 @@ jobs:
   docker:
     name: Build and Push (${{ matrix.variant }})
     runs-on: ubuntu-latest
-    env:
-      IMAGE_NAME: mostlylucid-nmt
     strategy:
       fail-fast: false
       matrix:
         include:
           - variant: cpu
             dockerfile: Dockerfile
-            image_suffix: ''
+            tags_suffix: cpu
+            is_latest: true
+          - variant: cpu-min
+            dockerfile: Dockerfile.min
+            tags_suffix: cpu-min
+            is_latest: false
           - variant: gpu
             dockerfile: Dockerfile.gpu
-            image_suffix: '-gpu'
+            tags_suffix: gpu
+            is_latest: false
+          - variant: gpu-min
+            dockerfile: Dockerfile.gpu.min
+            tags_suffix: gpu-min
+            is_latest: false
 
     steps:
       - name: Checkout
@@ -55,18 +63,31 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Generate image metadata
+      - name: Generate version string
+        id: version
+        run: |
+          VERSION=$(date -u +"%Y%m%d.%H%M%S")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          VCS_REF=$(git rev-parse --short HEAD)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+          echo "vcs_ref=${VCS_REF}" >> $GITHUB_OUTPUT
+
+      - name: Generate Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
+          # ONE repository for all variants
           images: |
-            ghcr.io/${{ github.repository }}${{ matrix.image_suffix }}
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}${{ matrix.image_suffix }}
+            ghcr.io/${{ github.repository_owner }}/mostlylucid-nmt
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt
+          # Tags for this specific variant
           tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ matrix.tags_suffix }}
+            type=raw,value=${{ matrix.tags_suffix }}-${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable=${{ matrix.is_latest && github.ref == 'refs/heads/main' }}
+          flavor: |
+            latest=false
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -78,5 +99,33 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            BUILD_DATE=${{ steps.version.outputs.build_date }}
+            VCS_REF=${{ steps.version.outputs.vcs_ref }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
+
+      - name: Update Docker Hub description
+        if: github.event_name != 'pull_request' && matrix.variant == 'cpu'
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt
+          readme-filepath: ./DOCKER_HUB.md
+          short-description: "FastAPI neural machine translation service with Opus-MT, mBART50, and M2M100 support. CPU & GPU variants available."
+
+      - name: Image summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "### Built and pushed: ${{ matrix.variant }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:${{ matrix.tags_suffix }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:${{ matrix.tags_suffix }}-${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ matrix.is_latest }}" == "true" ]; then
+            echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:latest" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
