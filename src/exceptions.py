@@ -40,3 +40,25 @@ class ModelLoadError(TranslatorException):
         self.model_name = model_name
         self.original_error = original_error
         super().__init__(f"Failed to load model {model_name}: {original_error}")
+
+
+class OutOfMemoryError(TranslatorException):
+    """Raised when system is critically low on memory (RAM or VRAM).
+
+    This exception indicates that:
+    - System RAM or GPU VRAM is at emergency levels (95%+)
+    - All cached models have been evicted
+    - Loading new models would likely cause OOM crash
+    - Service needs time to recover or needs more resources
+    """
+
+    def __init__(self, ram_pct: float = 0.0, vram_pct: float = 0.0):
+        self.ram_pct = ram_pct
+        self.vram_pct = vram_pct
+
+        if vram_pct > 0:
+            msg = f"Out of memory: RAM at {ram_pct:.1f}%, VRAM at {vram_pct:.1f}%. All models evicted. Cannot load new models."
+        else:
+            msg = f"Out of memory: RAM at {ram_pct:.1f}%. All models evicted. Cannot load new models."
+
+        super().__init__(msg)

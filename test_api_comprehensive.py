@@ -305,7 +305,10 @@ def test_multi_model_switching():
 
         if success:
             translation = response.get("translated", [""])[0]
-            print_success(f"Translation: '{translation}' [{family}]")
+            try:
+                print_success(f"Translation: '{translation}' [{family}]")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                print_success(f"Translation received [{family}]")
         else:
             print_fail(f"Failed: {response.get('error', 'Unknown error')}")
 
@@ -395,11 +398,11 @@ def main():
         print_header("TEST SUITE COMPLETE")
         print_success("All test sets executed successfully!")
         print_info("Check server logs to see:")
-        print_info("  • Download progress banners with sizes")
-        print_info("  • Cache HIT/MISS indicators (✓/✗)")
-        print_info("  • Model family fallback decisions")
-        print_info("  • Intelligent pivot selection")
-        print_info("  • Device placement (CPU/GPU)")
+        print_info("  - Download progress banners with sizes")
+        print_info("  - Cache HIT/MISS indicators")
+        print_info("  - Model family fallback decisions")
+        print_info("  - Intelligent pivot selection")
+        print_info("  - Device placement (CPU/GPU)")
 
     except KeyboardInterrupt:
         print_warning("\n\nTests interrupted by user")

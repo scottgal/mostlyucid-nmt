@@ -26,6 +26,51 @@ Features:
 - Structured logging with optional file rotation for long-running stability
 
 
+## 🚀 Latest Updates - v3.2
+
+### Intelligent Memory Management 🧠
+
+**Automatically prevents out-of-memory crashes!**
+
+The cache now monitors both system RAM and GPU VRAM in real-time and automatically evicts cached models when memory gets dangerously low. Perfect for long-running production deployments!
+
+**Features:**
+- ✅ **Real-time monitoring**: Tracks both RAM and VRAM usage
+- ✅ **Two-tier thresholds**: Warning (80%) and Critical (90%) levels
+- ✅ **Automatic eviction**: Frees memory before OOM crashes occur
+- ✅ **Smart cleanup**: Moves evicted models to CPU, clears CUDA cache
+- ✅ **Minimal overhead**: Only checks every N operations (configurable)
+- ✅ **Full visibility**: Logs memory stats at startup, warnings, and evictions
+
+**Example logs:**
+```
+💾 System RAM: 14.2GB / 16.0GB (88.8%)
+🎮 GPU VRAM: 6.1GB / 8.0GB (76.3%)
+
+⚠️  High RAM usage: 85.2% (13.6GB/16.0GB) - Consider reducing MAX_CACHED_MODELS if this persists
+
+🚨 CRITICAL RAM: 92.1% (14.7GB/16.0GB) - Auto-evicting oldest cached model!
+🧹 Auto-evicted oldest model: en->es (memory management)
+💾 RAM after eviction: 87.3% (14.0GB/16.0GB)
+```
+
+**Configuration:**
+```bash
+ENABLE_MEMORY_MONITOR=1                # Enable (default: ON)
+MEMORY_CRITICAL_THRESHOLD=90.0         # Auto-evict at 90% RAM (default)
+GPU_MEMORY_CRITICAL_THRESHOLD=90.0     # Auto-evict at 90% VRAM (default)
+MEMORY_CHECK_INTERVAL=5                # Check every 5 operations (default)
+```
+
+**Benefits:**
+- 🛡️ Prevents OOM crashes in production
+- 📊 Better visibility into memory usage
+- 🔄 Graceful degradation under memory pressure
+- 🚀 No manual intervention needed
+- 💰 Saves costs by preventing restarts
+
+---
+
 ## 🚀 Latest Updates - v3.1
 
 ### Major Reliability & User Experience Enhancements
@@ -1073,6 +1118,24 @@ Defaults are shown in parentheses.
 - `LOG_FILE_BACKUP_COUNT` = int (`5`)
 - `LOG_FORMAT` = `plain|json` (`plain`)
 - `LOG_INCLUDE_TEXT` = `1|0` (`0`) — include raw texts in logs (off by default for privacy).
+
+### Intelligent Memory Management (NEW in v3.2!)
+- `ENABLE_MEMORY_MONITOR` = `1|0` (`1`) — enable intelligent memory monitoring and auto-eviction
+- `MEMORY_WARNING_THRESHOLD` = float (`80.0`) — warn when system RAM usage exceeds this percentage
+- `MEMORY_CRITICAL_THRESHOLD` = float (`90.0`) — auto-evict cached models when RAM exceeds this percentage
+- `GPU_MEMORY_WARNING_THRESHOLD` = float (`80.0`) — warn when GPU VRAM usage exceeds this percentage
+- `GPU_MEMORY_CRITICAL_THRESHOLD` = float (`90.0`) — auto-evict cached models when VRAM exceeds this percentage
+- `MEMORY_CHECK_INTERVAL` = int (`5`) — check memory every N cache operations (to avoid overhead)
+
+**How it works:**
+- Cache periodically monitors both system RAM and GPU VRAM
+- When memory reaches WARNING threshold: logs warning but takes no action
+- When memory reaches CRITICAL threshold: automatically evicts oldest cached model to free memory
+- After eviction: moves model to CPU and clears CUDA cache
+- Prevents out-of-memory crashes in long-running deployments
+- Works on both CPU and GPU deployments
+
+**Example:** If `MEMORY_CRITICAL_THRESHOLD=90` and RAM reaches 92%, the cache will automatically evict the least recently used model, log the action, and free memory. This prevents the service from crashing due to OOM errors.
 
 ### Maintenance
 - `CUDA_CACHE_CLEAR_INTERVAL_SEC` = int (`0`) — periodically call `torch.cuda.empty_cache()`; `0` disables.

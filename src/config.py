@@ -157,6 +157,14 @@ class Config:
     ENABLE_METADATA: bool = os.getenv("ENABLE_METADATA", "0").lower() in ("1", "true", "yes")
     METADATA_VIA_HEADERS: bool = os.getenv("METADATA_VIA_HEADERS", "0").lower() in ("1", "true", "yes")
 
+    # Intelligent memory management
+    ENABLE_MEMORY_MONITOR: bool = os.getenv("ENABLE_MEMORY_MONITOR", "1").lower() in ("1", "true", "yes")
+    MEMORY_WARNING_THRESHOLD: float = float(os.getenv("MEMORY_WARNING_THRESHOLD", "80.0"))  # Warn at 80% RAM usage
+    MEMORY_CRITICAL_THRESHOLD: float = float(os.getenv("MEMORY_CRITICAL_THRESHOLD", "90.0"))  # Auto-evict at 90% RAM usage
+    GPU_MEMORY_WARNING_THRESHOLD: float = float(os.getenv("GPU_MEMORY_WARNING_THRESHOLD", "80.0"))  # Warn at 80% VRAM
+    GPU_MEMORY_CRITICAL_THRESHOLD: float = float(os.getenv("GPU_MEMORY_CRITICAL_THRESHOLD", "90.0"))  # Auto-evict at 90% VRAM
+    MEMORY_CHECK_INTERVAL: int = int(os.getenv("MEMORY_CHECK_INTERVAL", "5"))  # Check memory every N cache operations
+
     @classmethod
     def get_supported_langs(cls) -> List[str]:
         """Get supported language codes for current model family.
