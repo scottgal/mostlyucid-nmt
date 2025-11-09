@@ -1,0 +1,97 @@
+# Dockerfile.arm64 - Raspberry Pi / ARM64 optimized build
+# Designed for Raspberry Pi 4/5 with 4GB+ RAM
+# No GPU support, CPU-only translation
+
+FROM python:3.11-slim-bookworm
+
+# Build arguments
+ARG VERSION=3.2.0
+
+# Labels
+LABEL org.opencontainers.image.title="mostlylucid-nmt"
+LABEL org.opencontainers.image.description="Neural Machine Translation API for Raspberry Pi (ARM64)"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.authors="MostlyLucid"
+LABEL org.opencontainers.image.source="https://github.com/scottgal/mostlylucid-nmt"
+LABEL org.opencontainers.image.architecture="arm64"
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+# Keep minimal for ARM devices with limited storage
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+# Use pip's ARM64 wheels where available
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY app.py .
+COPY public/ ./public/
+
+# Create directory for models (will use volume mount)
+RUN mkdir -p /models
+
+# Environment variables - optimized for Raspberry Pi
+ENV PYTHONUNBUFFERED=1 \
+    # Device settings - CPU only for ARM
+    USE_GPU=false \
+    DEVICE=cpu \
+    # Conservative memory settings for Raspberry Pi
+    MAX_CACHED_MODELS=2 \
+    MAX_WORKERS_BACKEND=1 \
+    MAX_WORKERS_FRONTEND=1 \
+    # Smaller batch size for limited RAM
+    EASYNMT_BATCH_SIZE=4 \
+    # Queue settings
+    ENABLE_QUEUE=1 \
+    MAX_QUEUE_SIZE=50 \
+    MAX_INFLIGHT_TRANSLATIONS=1 \
+    # Memory monitoring - critical for Pi!
+    ENABLE_MEMORY_MONITOR=1 \
+    MEMORY_WARNING_THRESHOLD=75.0 \
+    MEMORY_CRITICAL_THRESHOLD=85.0 \
+    MEMORY_CHECK_INTERVAL=3 \
+    # Model family - opus-mt recommended for Pi
+    MODEL_FAMILY=opus-mt \
+    # Cache directory
+    MODEL_CACHE_DIR=/models \
+    # Logging
+    LOG_LEVEL=INFO \
+    REQUEST_LOG=0 \
+    # Server settings
+    WEB_CONCURRENCY=1 \
+    TIMEOUT=300 \
+    GRACEFUL_TIMEOUT=30 \
+    KEEP_ALIVE=5
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/healthz || exit 1
+
+# Run with Gunicorn
+# Single worker for Raspberry Pi's limited resources
+CMD ["gunicorn", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "-w", "1", \
+     "-b", "0.0.0.0:8000", \
+     "--timeout", "300", \
+     "--graceful-timeout", "30", \
+     "--keepalive", "5", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "app:app"]

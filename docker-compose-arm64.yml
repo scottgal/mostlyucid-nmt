@@ -1,0 +1,74 @@
+services:
+  translation:
+    image: mostlylucid-nmt:arm64
+    container_name: mostlylucid-nmt-pi
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persistent model cache
+      - ./model-cache:/models
+      # Optional: logs directory
+      - ./logs:/var/log/mostlylucid-nmt
+    environment:
+      # Device settings - CPU only for Raspberry Pi
+      USE_GPU: "false"
+      DEVICE: "cpu"
+
+      # Model settings - optimized for Pi
+      MODEL_FAMILY: "opus-mt"  # Recommended for Pi
+      MODEL_CACHE_DIR: "/models"
+      MAX_CACHED_MODELS: "2"  # Low due to RAM constraints
+
+      # Performance settings - conservative for Pi
+      EASYNMT_BATCH_SIZE: "4"  # Small batches
+      MAX_WORKERS_BACKEND: "1"
+      MAX_WORKERS_FRONTEND: "1"
+      WEB_CONCURRENCY: "1"
+
+      # Memory monitoring - CRITICAL for Pi!
+      ENABLE_MEMORY_MONITOR: "1"
+      MEMORY_WARNING_THRESHOLD: "75.0"  # Lower threshold for Pi
+      MEMORY_CRITICAL_THRESHOLD: "85.0"  # Aggressive eviction
+      MEMORY_CHECK_INTERVAL: "3"  # Check frequently
+
+      # Queue settings
+      ENABLE_QUEUE: "1"
+      MAX_QUEUE_SIZE: "50"
+      MAX_INFLIGHT_TRANSLATIONS: "1"
+      TIMEOUT: "300"  # 5 minutes for slower CPU
+
+      # Logging
+      LOG_LEVEL: "INFO"
+      REQUEST_LOG: "0"  # Disable to save CPU
+      LOG_TO_FILE: "1"
+      LOG_FILE_PATH: "/var/log/mostlylucid-nmt/app.log"
+
+      # Auto-fallback
+      AUTO_MODEL_FALLBACK: "1"
+      PIVOT_FALLBACK: "1"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 2m  # Longer startup on Pi
+
+    # Resource limits - adjust based on your Pi model
+    # Raspberry Pi 4 4GB recommended minimum
+    deploy:
+      resources:
+        limits:
+          memory: 3G  # Leave 1GB for system
+        reservations:
+          memory: 512M
+
+# Create named volume for model cache
+volumes:
+  model-cache:
+    driver: local
+
+networks:
+  default:
+    name: translation-network
