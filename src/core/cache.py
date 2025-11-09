@@ -6,6 +6,13 @@ import torch
 
 from src.core.logging import logger
 
+# Try to import Intel Extension for PyTorch (IPEX) if available
+try:
+    import intel_extension_for_pytorch as ipex
+    HAS_IPEX = True
+except ImportError:
+    HAS_IPEX = False
+
 
 class LRUPipelineCache(OrderedDict):
     """LRU cache with automatic GPU memory management on eviction."""
@@ -56,10 +63,25 @@ class LRUPipelineCache(OrderedDict):
             except Exception as e:
                 logger.debug(f"Error during cache eviction cleanup: {e}")
 
-            if torch.cuda.is_available():
-                try:
-                    torch.cuda.empty_cache()
-                except Exception as e:
-                    logger.debug(f"Error clearing CUDA cache: {e}")
+            # Clear GPU cache for all supported device types
+            self._clear_gpu_cache()
 
             logger.info(f"Evicted pipeline {old_key} from cache")
+
+    def _clear_gpu_cache(self) -> None:
+        """Clear GPU memory cache for NVIDIA CUDA, AMD ROCm, or Intel XPU."""
+        # Clear CUDA cache (works for both NVIDIA and AMD ROCm)
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                logger.debug("Cleared CUDA/ROCm cache")
+            except Exception as e:
+                logger.debug(f"Error clearing CUDA cache: {e}")
+
+        # Clear Intel XPU cache
+        if HAS_IPEX and hasattr(torch, 'xpu') and torch.xpu.is_available():
+            try:
+                torch.xpu.empty_cache()
+                logger.debug("Cleared Intel XPU cache")
+            except Exception as e:
+                logger.debug(f"Error clearing XPU cache: {e}")

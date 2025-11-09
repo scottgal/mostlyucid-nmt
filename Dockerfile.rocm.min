@@ -1,0 +1,106 @@
+# Dockerfile.rocm.min — Minimal AMD ROCm-enabled image with no preloaded models
+#
+# FAST BUILD (no model downloads - ~30 seconds):
+#   docker build -f Dockerfile.rocm.min -t scottgal/mostlylucid-nmt:rocm-min --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#
+# Run example (requires AMD GPU with ROCm drivers):
+#   docker run --device=/dev/kfd --device=/dev/dri -e USE_GPU=true -v ./model-cache:/models -p 8000:8000 scottgal/mostlylucid-nmt:rocm-min
+#
+# FASTEST DEVELOPMENT WORKFLOW (code updates only):
+#   1. Build once: docker build -f Dockerfile.rocm.min -t dev-rocm .
+#   2. Code-only rebuild: ~3 seconds (just copies updated .py files)
+#   3. Zero-rebuild option: Mount source code directly
+#
+#      docker run --device=/dev/kfd --device=/dev/dri -p 8000:8000 -v $(pwd)/src:/app/src -v $(pwd)/app.py:/app/app.py -v ./model-cache:/models dev-rocm
+#
+# LAYER CACHING: Optimised for fast rebuilds
+#   1. Base ROCm image (cached)
+#   2. System packages (cached)
+#   3. Python dependencies (cached unless requirements.txt changes)
+#   4. Source code (rebuilds on .py changes - FAST, ~3 seconds!)
+#
+FROM rocm/pytorch:rocm6.2_ubuntu22.04_py3.10_pytorch_release_2.3.0
+
+# Build arguments for versioning
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG VCS_REF
+
+# OCI labels for metadata
+LABEL org.opencontainers.image.title="mostlylucid-nmt" \
+      org.opencontainers.image.description="FastAPI neural machine translation service - AMD ROCm, no preloaded models" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/scottgal/mostlylucid-nmt" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.vendor="scottgal" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.documentation="https://github.com/scottgal/mostlylucid-nmt/blob/main/README.md" \
+      variant="rocm-min"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    # Point all caches to the mounted volume to avoid baking anything into the image
+    HF_HOME=/models \
+    HF_DATASETS_CACHE=/models \
+    TORCH_HOME=/models \
+    # ROCm-specific settings
+    HSA_OVERRIDE_GFX_VERSION=10.3.0 \
+    # Performance defaults optimised for AMD GPU (fast as possible)
+    # MAX_INFLIGHT_TRANSLATIONS should equal number of GPUs (1 GPU = 1 inflight)
+    # Concurrency is handled by EASYNMT_BATCH_SIZE (64) batching multiple texts within each request
+    # For multi-GPU: set MAX_INFLIGHT_TRANSLATIONS to GPU count and use ROCR_VISIBLE_DEVICES
+    WEB_CONCURRENCY=1 \
+    MAX_INFLIGHT_TRANSLATIONS=1 \
+    EASYNMT_BATCH_SIZE=64 \
+    EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+    MAX_CACHED_MODELS=10 \
+    ENABLE_QUEUE=1 \
+    MAX_QUEUE_SIZE=2000 \
+    # Fast shutdown (5s graceful timeout instead of 20s)
+    GRACEFUL_TIMEOUT=5
+
+WORKDIR /app
+
+# Install additional dependencies not in base ROCm image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-prod.txt ./
+
+# Install Python deps (skip torch as it's already installed in base ROCm image)
+RUN grep -v "^torch\>" requirements-prod.txt > requirements.notorch.txt && \
+    pip install --no-cache-dir -r requirements.notorch.txt
+
+# Copy source code
+COPY src/ ./src/
+COPY public/ ./public/
+COPY app.py ./
+
+# Create directory for model cache (can be mounted as volume)
+RUN mkdir -p /models
+
+# Set default model cache directory
+ENV MODEL_CACHE_DIR=/models
+
+# Don't preload any models by default (override with PRELOAD_MODELS env var)
+ENV PRELOAD_MODELS=""
+
+# Common runtime envs:
+# - USE_GPU=true|false|auto (default auto)
+# - DEVICE=auto|cpu|cuda|cuda:0 (overrides USE_GPU when set - ROCm uses same CUDA API)
+# - PRELOAD_MODELS="en->de,de->en,fr->en" (preload at startup)
+# - MAX_CACHED_MODELS=6 (LRU capacity)
+# - MODEL_FAMILY=opus-mt|mbart50|m2m100 (default opus-mt)
+
+EXPOSE 8000
+
+# Ensure fast, graceful shutdown inside the container
+STOPSIGNAL SIGTERM
+
+# Exec so Gunicorn is PID 1 and receives signals directly; set shorter graceful timeouts
+CMD ["bash", "-lc", "exec gunicorn -k uvicorn.workers.UvicornWorker -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:8000 --timeout ${TIMEOUT:-60} --graceful-timeout ${GRACEFUL_TIMEOUT:-20} --keep-alive ${KEEP_ALIVE:-5} app:app"]

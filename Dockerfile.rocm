@@ -1,0 +1,104 @@
+# Dockerfile.rocm — AMD ROCm-enabled image with preloaded models
+#
+# FULL BUILD (preloads models - SLOW, ~5-10 minutes):
+#   docker build -f Dockerfile.rocm -t scottgal/mostlylucid-nmt:rocm --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#
+# Run example (requires AMD GPU with ROCm drivers):
+#   docker run --device=/dev/kfd --device=/dev/dri -e USE_GPU=true -e PRELOAD_MODELS="en->de,de->en" -p 8000:8000 scottgal/mostlylucid-nmt:rocm
+#
+# LAYER CACHING: Optimised so code changes only rebuild the final layer:
+#   1. Base ROCm image (cached)
+#   2. System packages (cached)
+#   3. Python dependencies (cached unless requirements.txt changes)
+#   4. Model downloads (SLOW - cached unless PRELOAD_LANGS/PRELOAD_PAIRS change)
+#   5. Source code (rebuilds when .py files change - FAST!)
+#
+FROM rocm/pytorch:rocm6.2_ubuntu22.04_py3.10_pytorch_release_2.3.0
+
+# Build arguments for versioning
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG VCS_REF
+
+# OCI labels for metadata
+LABEL org.opencontainers.image.title="mostlylucid-nmt" \
+      org.opencontainers.image.description="FastAPI neural machine translation service - AMD ROCm with preloaded models" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/scottgal/mostlylucid-nmt" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.vendor="scottgal" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.documentation="https://github.com/scottgal/mostlylucid-nmt/blob/main/README.md" \
+      variant="rocm-full"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/app/models \
+    HF_DATASETS_CACHE=/app/models \
+    TORCH_HOME=/app/models \
+    # ROCm-specific settings
+    HSA_OVERRIDE_GFX_VERSION=10.3.0 \
+    # Performance defaults optimised for AMD GPU (fast as possible)
+    # MAX_INFLIGHT_TRANSLATIONS should equal number of GPUs (1 GPU = 1 inflight)
+    # Concurrency is handled by EASYNMT_BATCH_SIZE (64) batching multiple texts within each request
+    # For multi-GPU: set MAX_INFLIGHT_TRANSLATIONS to GPU count and use ROCR_VISIBLE_DEVICES
+    WEB_CONCURRENCY=1 \
+    MAX_INFLIGHT_TRANSLATIONS=1 \
+    EASYNMT_BATCH_SIZE=64 \
+    EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+    MAX_CACHED_MODELS=10 \
+    ENABLE_QUEUE=1 \
+    MAX_QUEUE_SIZE=2000 \
+    # Fast shutdown (5s graceful timeout instead of 20s)
+    GRACEFUL_TIMEOUT=5
+
+WORKDIR /app
+
+# Install additional dependencies not in base ROCm image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements (base ROCm image already has PyTorch)
+COPY requirements-prod.txt ./
+
+# Install Python deps (skip torch as it's already installed)
+RUN grep -v "^torch\>" requirements-prod.txt > requirements.notorch.txt && \
+    pip install --no-cache-dir --no-compile -r requirements.notorch.txt
+
+# Preload a minimal, curated set of Opus-MT models into /app/models to avoid runtime downloads
+# Default build arg preloads EN<->(es,fr,de,it). Prefer specifying explicit pairs via PRELOAD_PAIRS.
+# Override examples:
+#   --build-arg PRELOAD_PAIRS="en->de,de->en,fr->en,en->it"
+#   --build-arg PRELOAD_LANGS="es,fr,de"   # legacy: expands to EN<->XX for each
+ARG PRELOAD_LANGS="es,fr,de,it"
+ARG PRELOAD_PAIRS=""
+RUN mkdir -p /app/models /app/tools
+COPY tools/preload_models.py /app/tools/preload_models.py
+RUN bash -lc 'if [ -n "$PRELOAD_PAIRS" ]; then \
+      python3 -u /app/tools/preload_models.py --family opus-mt --pairs "$PRELOAD_PAIRS" --dest /app/models; \
+    else \
+      python3 -u /app/tools/preload_models.py --family opus-mt --langs "$PRELOAD_LANGS" --dest /app/models; \
+    fi'
+
+COPY src/ ./src/
+COPY public/ ./public/
+COPY app.py ./
+
+EXPOSE 8000
+
+# Common runtime envs:
+# - USE_GPU=true|false|auto (default auto)
+# - DEVICE=auto|cpu|cuda|cuda:0 (overrides USE_GPU when set)
+# - PRELOAD_MODELS="en->de,de->en,fr->en" (preload at startup)
+# - MAX_CACHED_MODELS=6 (LRU capacity)
+
+# Ensure fast, graceful shutdown inside the container
+STOPSIGNAL SIGTERM
+
+# Exec so Gunicorn is PID 1 and receives signals directly; set shorter graceful timeouts
+CMD ["bash", "-lc", "exec gunicorn -k uvicorn.workers.UvicornWorker -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:8000 --timeout ${TIMEOUT:-60} --graceful-timeout ${GRACEFUL_TIMEOUT:-20} --keep-alive ${KEEP_ALIVE:-5} app:app"]

@@ -27,7 +27,8 @@
       "Bash(timeout 5 bash:*)",
       "Bash(powershell -Command \"(Get-Content ''E:\\source\\mostlylucid-nmt\\BUILD.md'').Count\")",
       "Bash(docker image ls:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
