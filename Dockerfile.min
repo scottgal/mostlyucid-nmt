@@ -59,7 +59,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     EASYNMT_BATCH_SIZE=16 \
     MAX_CACHED_MODELS=5 \
     ENABLE_QUEUE=1 \
-    MAX_QUEUE_SIZE=1000
+    MAX_QUEUE_SIZE=1000 \
+    # Fast shutdown (5s graceful timeout instead of 20s)
+    GRACEFUL_TIMEOUT=5
 
 WORKDIR /app
 
@@ -67,10 +69,10 @@ WORKDIR /app
 # Keep image minimal by avoiding build toolchains
 # (If a dependency needs compilation, switch to the full CPU image)
 
-COPY requirements.txt .
+COPY requirements-prod.txt .
 # --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)
-# Docker layer caching still works! When requirements.txt doesn't change, this layer is reused (fast!)
-RUN pip install --no-cache-dir -r requirements.txt
+# Docker layer caching still works! When requirements changes, this layer rebuilds
+RUN pip install --no-cache-dir -r requirements-prod.txt
 
 # Copy source code (small)
 COPY src/ ./src/

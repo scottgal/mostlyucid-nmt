@@ -57,7 +57,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
     MAX_CACHED_MODELS=10 \
     ENABLE_QUEUE=1 \
-    MAX_QUEUE_SIZE=2000
+    MAX_QUEUE_SIZE=2000 \
+    # Fast shutdown (5s graceful timeout instead of 20s)
+    GRACEFUL_TIMEOUT=5
 
 # System deps (keep minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -69,11 +71,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python dependencies excluding torch (we install CUDA torch separately)
-COPY requirements.txt ./
+COPY requirements-prod.txt ./
 # --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)
 # --no-compile: Skip .pyc compilation (faster builds, negligible runtime impact)
-# Docker layer caching: When requirements.txt doesn't change, this layer is reused (FAST!)
-RUN grep -v "^torch\>" requirements.txt > requirements.notorch.txt && \
+# Docker layer caching: When requirements changes, this layer rebuilds
+RUN grep -v "^torch\>" requirements-prod.txt > requirements.notorch.txt && \
     pip3 install --break-system-packages --no-cache-dir --no-compile -r requirements.notorch.txt
 
 # Install CUDA-enabled PyTorch matching CUDA 12.4 (compatible with CUDA 12.6 runtime)

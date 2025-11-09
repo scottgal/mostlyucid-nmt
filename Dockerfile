@@ -51,18 +51,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
     EASYNMT_BATCH_SIZE=16 \
     MAX_CACHED_MODELS=5 \
     ENABLE_QUEUE=1 \
-    MAX_QUEUE_SIZE=1000
+    MAX_QUEUE_SIZE=1000 \
+    # Fast shutdown (5s graceful timeout instead of 20s)
+    GRACEFUL_TIMEOUT=5
 
 WORKDIR /app
 
 # No extra system deps to keep image smaller (python:3.12-slim already includes what we need)
 
-# Install Python dependencies
-COPY requirements.txt ./
+# Install Python dependencies (production only, no test tools)
+COPY requirements-prod.txt ./
 # --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)
 # --no-compile: Skip .pyc compilation (faster builds, negligible runtime impact)
-# Docker layer caching: When requirements.txt doesn't change, this layer is reused (FAST!)
-RUN pip install --no-cache-dir --no-compile -r requirements.txt
+# Docker layer caching: When requirements changes, this layer rebuilds
+RUN pip install --no-cache-dir --no-compile -r requirements-prod.txt
 
 # Preload a minimal, curated set of Opus-MT models into /app/models to avoid runtime downloads
 # Default build arg preloads EN<->(es,fr,de,it). Prefer specifying explicit pairs via PRELOAD_PAIRS.

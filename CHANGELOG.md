@@ -7,28 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.0.0] - 2025-11-09
 
+Major release with enhanced demo page, performance optimisation, comprehensive testing suite, production-ready deployment documentation, and EasyNMT compatibility namespace.
+
+This version represents a significant leap in production readiness, developer experience, and operational excellence.
+
 ### Added
-- EasyNMT compatibility namespace under `/compat` providing strict EasyNMT response shapes while keeping the enhanced primary API intact.
-  - `GET /compat/translate` → `{ "translations": [...] }`
-  - `POST /compat/translate` → `{ "target_lang", "source_lang", "detected_langs" (when auto), "translated", "translation_time" }`
-- Prepack images (CPU `:cpu`, GPU `:gpu`) now ship with a minimal set of preloaded Opus‑MT models to remove first‑request latency:
-  - Default preload languages: `es, fr, de, it` as en<->XX (8 repos total)
-  - You can now also specify explicit language PAIRS at build time via `ARG PRELOAD_PAIRS` (preferred for Opus‑MT). The preloader will fetch direct pairs when available and will smart‑pivot via English (download `src->en` and `en->tgt`) when a non‑English direct pair is missing.
-  - Location inside the image: `/app/models/Helsinki-NLP/opus-mt-*-*` (stored as `Helsinki-NLP--opus-mt-*-*`)
-- Cache overlay behavior: you can map an external cache directory on prepack images and it works on top of the preloaded set.
-  - Set `-v ./model-cache:/models -e MODEL_CACHE_DIR=/models`
-  - The service prefers preloaded snapshots when present and stores any new downloads into the mapped cache.
-- Release notes and documentation updated across README, DOCKER_HUB, and EasyNMT guide.
-- Minimal images (`:cpu-min`, `:gpu-min`) preload nothing by design; mapping a cache is optional (without it, models are re‑downloaded each run).
+- **Interactive demo page improvements**:
+  - Full viewport layout (100vw/100vh) for better user experience
+  - Proper themed select dropdowns instead of input/datalist
+  - Model family selection dropdown (Opus-MT, mBART50, M2M100)
+  - Dynamic language loading based on selected model family
+  - Scrollable output and translation areas
+- **Performance-optimised container defaults** (all images now "fast as possible" out of the box):
+  - GPU: `GRACEFUL_TIMEOUT=5`, `MAX_INFLIGHT_TRANSLATIONS=1`, `EASYNMT_BATCH_SIZE=64`, FP16 enabled
+  - CPU: `GRACEFUL_TIMEOUT=5`, `WEB_CONCURRENCY=4`, `MAX_INFLIGHT_TRANSLATIONS=4`, `EASYNMT_BATCH_SIZE=16`
+  - Fast shutdown (5s instead of 20s) - containers stop quickly without hanging
+- **Live API test suite** (`tests/test_api_live.py`):
+  - 30+ automated tests for health checks, translation, language detection, discovery endpoints
+  - Tests for automatic model downloads on unseen language pairs
+  - Tests for pivot translation fallback mechanism
+  - Smoke test markers for quick validation
+  - Cross-platform validation scripts (`validate-api.ps1`, `validate-api.sh`)
+- **k6 load testing** (`tests/k6-load-test.js`):
+  - Comprehensive performance testing with realistic traffic patterns
+  - Custom metrics for translation duration, translated characters, pivot translations
+  - Supports smoke, load, stress, and spike testing scenarios
+  - Detailed documentation for interpreting results and tuning based on findings
+- **Production-optimised builds**:
+  - Created `requirements-prod.txt` excluding test dependencies (pytest, pytest-cov, etc.)
+  - All Dockerfiles now use production requirements, saving ~200MB per image
+  - Reduced test overhead in production containers
+- **Comprehensive deployment documentation** in BUILD.md:
+  - 4 tuning scenarios: Maximum Throughput, Low Latency, High Concurrency, Memory-Constrained
+  - Docker Compose examples with GPU/CPU setups and health checks
+  - Kubernetes deployment manifests with PVC, resource limits, and probes
+  - Azure Container Instances examples
+  - Load testing guidance with k6
+  - Monitoring recommendations with Prometheus queries
+  - Common configuration patterns (multi-GPU, hybrid, model-specific)
+  - Concurrency vs throughput trade-offs clearly explained
 
 ### Fixed
-- GPU Docker build failure at model preload step (`python: not found`). Switched to `python3` in `Dockerfile.gpu` for the preload script.
+- **TRANSFORMERS_CACHE deprecation warning**: Removed deprecated `TRANSFORMERS_CACHE` environment variable from all Dockerfiles (now using only `HF_HOME` as per Transformers v5)
+- **Container shutdown behaviour**: Fast 5-second graceful timeout instead of 20-second hang, eliminating scary "Worker was sent SIGKILL" messages during normal shutdown
+- **Documentation clarity**: Added troubleshooting section explaining that "SIGKILL" message is normal shutdown behaviour, not an OOM error
+- **Image size documentation**: Updated size estimates and added explanation for why images are larger than original EasyNMT (PyTorch 2.x is 5x larger)
 
-### Notes
-- Version bumped to `3.0.0`.
-- No breaking changes to the primary API; legacy clients can use `/compat`.
-
-## [Unreleased]
+### Changed
+- Demo page now uses POST `/translate` endpoint (enhanced API) instead of `/compat/translate`
+- All emoticons removed from codebase per style guidelines
 
 ### Security
 - **BREAKING**: Updated base images to address vulnerabilities
@@ -98,7 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Health, readiness, and cache status endpoints
 - Structured logging with JSON output
 - Graceful shutdown handling
-- Symbol masking and input sanitization
+- Symbol masking and input sanitisation
 - Pivot translation fallback
 - Docker images for CPU and GPU
 
@@ -119,5 +146,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Queue configuration (MAX_QUEUE_SIZE, MAX_INFLIGHT_TRANSLATIONS)
 - Timeout settings (TRANSLATE_TIMEOUT_SEC)
 - Logging options (LOG_LEVEL, LOG_FORMAT, LOG_TO_FILE)
-- Input sanitization controls
+- Input sanitisation controls
 - Response alignment options

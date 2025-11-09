@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
         if _maintenance_task_handle is not None:
             _maintenance_task_handle.cancel()
             try:
-                await asyncio.wait_for(_maintenance_task_handle, timeout=2)
+                await asyncio.wait_for(_maintenance_task_handle, timeout=1)
             except Exception:
                 pass
     except Exception:

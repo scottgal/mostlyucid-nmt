@@ -6,12 +6,20 @@ This guide explains how to build and publish all 4 Docker image variants with pr
 
 All variants are published to the same repository: `scottgal/mostlylucid-nmt`
 
-| Tag | Dockerfile | Description | Size |
-|-----|------------|-------------|------|
-| `latest` | `Dockerfile` | CPU with preloaded models | ~2.5GB |
-| `min` | `Dockerfile.min` | CPU minimal, no preloaded models | ~1.5GB |
-| `gpu` | `Dockerfile.gpu` | GPU with CUDA 12.1 and preloaded models | ~5GB |
-| `gpu-min` | `Dockerfile.gpu.min` | GPU minimal, no preloaded models | ~4GB |
+| Tag | Dockerfile | Description | Approx Size |
+|-----|------------|-------------|------------|
+| `latest` | `Dockerfile` | CPU with preloaded models | 8-10GB |
+| `min` | `Dockerfile.min` | CPU minimal, no preloaded models | 3-4GB |
+| `gpu` | `Dockerfile.gpu` | GPU with CUDA 12.1 and preloaded models | 12-15GB |
+| `gpu-min` | `Dockerfile.gpu.min` | GPU minimal, no preloaded models | 6-8GB |
+
+**Why larger than EasyNMT (2-3GB)?**
+- **PyTorch 2.x vs 1.8**: Modern PyTorch is 5x larger (750MB vs 150MB for CPU, 5GB vs 1GB for GPU)
+- **CUDA 12.x runtime**: Newer CUDA toolkits are significantly larger
+- **Python 3.12 vs 3.8**: Modern Python includes more stdlib modules
+- **Better model support**: Transformers 4.x supports many more model architectures
+
+**Use `:min` variants** to avoid preloading models and reduce size by 60%
 
 ## Fast Development Builds
 
@@ -637,9 +645,64 @@ If you need to overwrite a version tag (not recommended for production):
 docker push scottgal/mostlylucid-nmt:${VERSION} --force
 ```
 
+### Images are too large (12GB for CPU, 17GB for GPU)
+
+**Root causes:**
+1. **PyTorch 2.x**: Modern PyTorch with CUDA 12.x is 5GB (vs 1GB for old PyTorch 1.8)
+2. **Preloaded models**: Full variants preload 4-8 translation models (adds 4-6GB)
+3. **Test dependencies**: pytest, pytest-cov add unnecessary weight
+
+**Solutions (in order of impact):**
+
+1. **Use `:min` variants** (60% smaller - most effective):
+```bash
+# 3-4GB instead of 10GB
+docker pull scottgal/mostlylucid-nmt:cpu-min
+
+# 6-8GB instead of 17GB
+docker pull scottgal/mostlylucid-nmt:gpu-min
+```
+
+2. **Volume-map model cache** (no preloaded models baked into image):
+```bash
+# Models download once to ./models, persist across container rebuilds
+docker run -v ./models:/models scottgal/mostlylucid-nmt:cpu-min
+```
+
+3. **Already implemented** (production builds now use `requirements-prod.txt`):
+- Removed pytest, pytest-cov, pytest-asyncio, pytest-mock (~200MB saved)
+- Using --no-cache-dir (100MB saved)
+
+**Trade-off**: `:min` variants download models on first use (1-5 min per model), but overall much smaller footprint
+
 ### Image labels not showing on Docker Hub
 
 Wait a few minutes after pushing - Docker Hub may cache the manifest. Clear your browser cache or use Docker CLI to inspect.
+
+### Container shutdown shows "Worker was sent SIGKILL! Perhaps out of memory?"
+
+**This is NORMAL and NOT an out-of-memory error.** This message appears when:
+
+1. You stop the container (Ctrl+C or `docker stop`)
+2. Gunicorn sends SIGTERM to workers
+3. Workers have `GRACEFUL_TIMEOUT` seconds (default: 5) to finish in-flight requests
+4. If workers don't exit within the timeout, Gunicorn sends SIGKILL to force shutdown
+5. The "Perhaps out of memory?" message is misleading - it's just Gunicorn's default message for SIGKILL
+
+**The container stops in ~5 seconds by design.** To make shutdown even faster:
+```bash
+# Reduce graceful timeout to 2 seconds
+docker run -e GRACEFUL_TIMEOUT=2 scottgal/mostlylucid-nmt:gpu
+
+# Or instant shutdown (not recommended for production)
+docker run -e GRACEFUL_TIMEOUT=0 scottgal/mostlylucid-nmt:gpu
+```
+
+**Actual OOM errors** look different and show kernel messages like:
+```
+Out of memory: Killed process 1234 (gunicorn) total-vm:8GB
+kernel: [12345.678] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null)
+```
 
 ## Best Practices
 

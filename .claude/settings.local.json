@@ -25,7 +25,9 @@
       "Bash(powershell -ExecutionPolicy Bypass -File \"build-dev.ps1\" -WhatIf)",
       "Bash(cat:*)",
       "Bash(timeout 5 bash:*)",
-      "Bash(powershell -Command \"(Get-Content ''E:\\source\\mostlylucid-nmt\\BUILD.md'').Count\")"
+      "Bash(powershell -Command \"(Get-Content ''E:\\source\\mostlylucid-nmt\\BUILD.md'').Count\")",
+      "Bash(docker image ls:*)",
+      "Bash(ping:*)"
     ],
     "deny": [],
     "ask": []

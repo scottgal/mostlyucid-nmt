@@ -1,0 +1,12 @@
+# requirements-prod.txt
+# Production dependencies only (no pytest, test tools)
+fastapi>=0.109.0
+pydantic>=2.0.0
+uvicorn[standard]>=0.27.0
+gunicorn>=21.2.0
+transformers>=4.36.0
+torch>=2.0.0
+langdetect>=1.0.9
+sentencepiece>=0.1.99
+sacremoses>=0.0.53
+httpx>=0.26.0
