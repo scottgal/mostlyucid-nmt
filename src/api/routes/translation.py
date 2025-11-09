@@ -91,16 +91,17 @@ async def translate_get(
     texts = []
     pivot_used = False
     metadata_dict = None
+    error = None
 
     try:
         async with await acquire_translate_slot():
             if config.TRANSLATE_TIMEOUT_SEC > 0:
-                texts, pivot_used, metadata_dict = await asyncio.wait_for(
+                texts, pivot_used, metadata_dict, error = await asyncio.wait_for(
                     translation_service.translate_async(base_texts, src, target_lang, eff_beam, perform_sentence_splitting, include_metadata),
                     timeout=config.TRANSLATE_TIMEOUT_SEC
                 )
             else:
-                texts, pivot_used, metadata_dict = await translation_service.translate_async(
+                texts, pivot_used, metadata_dict, error = await translation_service.translate_async(
                     base_texts, src, target_lang, eff_beam, perform_sentence_splitting, include_metadata
                 )
 
@@ -136,7 +137,7 @@ async def translate_get(
     if pivot_used:
         pivot_path = f"{src}->{config.PIVOT_LANG}->{target_lang}"
 
-    response = TranslateResponse(translations=texts, pivot_path=pivot_path)
+    response = TranslateResponse(translations=texts, pivot_path=pivot_path, error=error)
 
     # Optionally add metadata to response headers
     if config.METADATA_VIA_HEADERS and metadata_dict:
@@ -204,16 +205,17 @@ async def translate_post(
     texts = []
     pivot_used = False
     metadata_dict = None
+    error = None
 
     try:
         async with await acquire_translate_slot():
             if config.TRANSLATE_TIMEOUT_SEC > 0:
-                texts, pivot_used, metadata_dict = await asyncio.wait_for(
+                texts, pivot_used, metadata_dict, error = await asyncio.wait_for(
                     translation_service.translate_async(base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata, body.model_family),
                     timeout=config.TRANSLATE_TIMEOUT_SEC
                 )
             else:
-                texts, pivot_used, metadata_dict = await translation_service.translate_async(
+                texts, pivot_used, metadata_dict, error = await translation_service.translate_async(
                     base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata, body.model_family
                 )
 
@@ -249,7 +251,8 @@ async def translate_post(
         logger.info(f"{req_id} translate_post done items={len(texts)} dt={duration_sec:.3f}s")
 
     pivot_path = None
-    if pivot_used:
+    # Only show pivot path if it makes sense (pivot lang isn't source or target)
+    if pivot_used and config.PIVOT_LANG not in (src, body.target_lang):
         pivot_path = f"{src}->{config.PIVOT_LANG}->{body.target_lang}"
 
     # Build metadata object if requested
@@ -267,7 +270,8 @@ async def translate_post(
         translated=texts,
         translation_time=float(duration_sec),
         pivot_path=pivot_path,
-        metadata=metadata_obj
+        metadata=metadata_obj,
+        error=error
     )
 
     # Optionally add metadata to response headers

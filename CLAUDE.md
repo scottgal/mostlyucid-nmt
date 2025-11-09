@@ -49,6 +49,9 @@ mostlylucid-nmt/
 │   ├── test_cache.py
 │   ├── test_config.py
 │   └── test_api_integration.py
+├── test_api_comprehensive.py   # HTTP API test suite (Python, comprehensive)
+├── test_api_quick.sh           # Quick API test (Bash/Linux/Mac)
+├── test_api_quick.bat          # Quick API test (Windows)
 ├── app.py                      # Entry point (imports src.app)
 ├── app_old.py                  # Original monolithic version (backup)
 ├── requirements.txt            # Dependencies with versions
@@ -210,6 +213,38 @@ uvicorn src.app:app --reload --port 8000
 # Or with Gunicorn (production-like)
 gunicorn -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:8000 app:app
 ```
+
+### API Testing
+
+Three test scripts are provided to verify all v3.1 features (fallback, pivot, cache, etc.):
+
+```bash
+# Python comprehensive test suite (color output, detailed)
+python test_api_comprehensive.py
+
+# Bash quick test (Linux/Mac)
+chmod +x test_api_quick.sh
+./test_api_quick.sh
+
+# Windows batch file
+test_api_quick.bat
+```
+
+**Test coverage:**
+- Basic translation pairs (opus-mt)
+- Automatic fallback scenarios (opus-mt → mbart50/m2m100)
+- Explicit model family selection per request
+- Pivot translation with intelligent selection
+- Cache behavior across multiple requests
+- Batch translation
+- Rapid model family switching
+
+**What to watch in server logs during tests:**
+- Download progress banners showing model size, device, file count
+- Cache indicators: ✓ (hit), ✗ (miss), 💾 (cached), ⚠️ (evicted)
+- Model family fallback decisions (opus-mt → mbart50/m2m100)
+- Intelligent pivot selection reasoning (set intersection logic)
+- Device placement (CPU vs GPU cuda:0)
 
 ### Docker Builds
 

@@ -27,6 +27,121 @@ class TranslationService:
         """
         self.executor = executor
 
+    def _get_available_targets_from_source(self, src: str) -> set:
+        """Get all languages that can be translated TO from source.
+
+        Args:
+            src: Source language code
+
+        Returns:
+            Set of target language codes where src→tgt is supported
+        """
+        from src.services.model_manager import model_manager
+        targets = set()
+
+        # Check all model families
+        for family in ["opus-mt", "mbart50", "m2m100"]:
+            if family == "mbart50":
+                langs = set(config.MBART50_LANGS)
+            elif family == "m2m100":
+                langs = set(config.M2M100_LANGS)
+            else:  # opus-mt
+                langs = set(config.SUPPORTED_LANGS)
+
+            # For each potential target, check if pair is supported
+            for tgt in langs:
+                if tgt != src and model_manager._is_pair_supported(src, tgt, family):
+                    targets.add(tgt)
+
+        return targets
+
+    def _get_available_sources_to_target(self, tgt: str) -> set:
+        """Get all languages that can be translated FROM to reach target.
+
+        Args:
+            tgt: Target language code
+
+        Returns:
+            Set of source language codes where src→tgt is supported
+        """
+        from src.services.model_manager import model_manager
+        sources = set()
+
+        # Check all model families
+        for family in ["opus-mt", "mbart50", "m2m100"]:
+            if family == "mbart50":
+                langs = set(config.MBART50_LANGS)
+            elif family == "m2m100":
+                langs = set(config.M2M100_LANGS)
+            else:  # opus-mt
+                langs = set(config.SUPPORTED_LANGS)
+
+            # For each potential source, check if pair is supported
+            for src in langs:
+                if src != tgt and model_manager._is_pair_supported(src, tgt, family):
+                    sources.add(src)
+
+        return sources
+
+    def _select_pivot_language(self, src: str, tgt: str) -> Optional[str]:
+        """Intelligently select a pivot language using data-driven approach.
+
+        Args:
+            src: Source language code
+            tgt: Target language code
+
+        Returns:
+            Pivot language code, or None if no suitable pivot available
+
+        Strategy:
+            1. Find all languages X where src→X exists
+            2. Find all languages Y where Y→tgt exists
+            3. Find intersection (languages that work for BOTH legs)
+            4. Pick best from intersection (prefer default pivot lang, then by priority)
+        """
+        # Get all possible pivot languages (intersection of available routes)
+        logger.debug(f"[Pivot] Finding common intermediary languages for {src}→{tgt}")
+
+        # Languages reachable FROM source
+        from_source = self._get_available_targets_from_source(src)
+        logger.debug(f"[Pivot] Languages reachable from {src}: {len(from_source)} languages")
+
+        # Languages that can reach target
+        to_target = self._get_available_sources_to_target(tgt)
+        logger.debug(f"[Pivot] Languages that can reach {tgt}: {len(to_target)} languages")
+
+        # Find common intermediaries (both legs exist)
+        common_pivots = from_source & to_target
+
+        # Remove source and target from candidates
+        common_pivots.discard(src)
+        common_pivots.discard(tgt)
+
+        if not common_pivots:
+            logger.warning(f"[Pivot] No common intermediary language found for {src}→{tgt}")
+            logger.debug(f"[Pivot] from_source={sorted(list(from_source)[:10])}, to_target={sorted(list(to_target)[:10])}")
+            return None
+
+        logger.info(f"[Pivot] Found {len(common_pivots)} possible pivot languages: {sorted(list(common_pivots)[:10])}")
+
+        # Priority order for selecting from common pivots
+        priority_order = [
+            config.PIVOT_LANG,  # Default (usually "en")
+            "es", "fr", "de", "zh", "ru",  # Major languages
+            "it", "pt", "nl", "pl", "ja",  # Secondary major languages
+        ]
+
+        # First, try pivots in priority order
+        for candidate in priority_order:
+            if candidate in common_pivots:
+                logger.info(f"[Pivot] Selected pivot: {src} → {candidate} → {tgt} (priority match)")
+                return candidate
+
+        # If no priority match, pick any common pivot (alphabetically first for consistency)
+        pivot = sorted(common_pivots)[0]
+        logger.info(f"[Pivot] Selected pivot: {src} → {pivot} → {tgt} (from {len(common_pivots)} available)")
+        return pivot
+
     def _translate_with_translator(
         self,
         translator: any,
@@ -69,7 +184,7 @@ class TranslationService:
         perform_sentence_splitting: bool,
         translator_direct: Optional[any] = None,
         preferred_family: Optional[str] = None
-    ) -> Tuple[str, bool]:
+    ) -> Tuple[str, bool, Optional[str]]:
         """Translate a single text item.
 
         Args:
@@ -81,13 +196,13 @@ class TranslationService:
             translator_direct: Pre-loaded translator or None
 
         Returns:
-            Tuple of (translated text or placeholder if failed, pivot_used flag)
+            Tuple of (translated text or placeholder if failed, pivot_used flag, optional error message)
         """
         logger.debug(f"[Translate] Input text (len={len(txt)}): {txt[:100]}...")
 
         if config.INPUT_SANITIZE and is_noise(txt):
             logger.info(f"[Translate] Text detected as noise, skipping translation")
-            return (config.SANITIZE_PLACEHOLDER, False)
+            return (config.SANITIZE_PLACEHOLDER, False, None)
 
         gen_max_len = 512
         if config.EASYNMT_MAX_TEXT_LEN_INT is not None:
@@ -107,7 +222,7 @@ class TranslationService:
                 combined = config.JOIN_SENTENCES_WITH.join(out)
                 combined = remove_repeating_new_symbols(txt, combined)
                 logger.info(f"[Translate] Success with sentence splitting: {combined[:50]}...")
-                return (combined, False)
+                return (combined, False, None)
             else:
                 logger.debug(f"[Translate] Translating without sentence splitting")
                 res = translator([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
@@ -116,18 +231,32 @@ class TranslationService:
                 logger.debug(f"[Translate] Extracted translation_text: '{base}'")
                 base = remove_repeating_new_symbols(txt, base)
                 logger.info(f"[Translate] Success: '{base}'")
-                return (base, False)
+                return (base, False, None)
 
         except Exception as direct_err:
             # Attempt pivot fallback if enabled
             logger.error(f"[Translate] Direct translation failed: {type(direct_err).__name__}: {direct_err}")
-            if not config.PIVOT_FALLBACK or config.PIVOT_LANG in (src, tgt):
-                logger.warning(f"[Translate] No pivot available, returning placeholder")
-                return (config.SANITIZE_PLACEHOLDER, False)
+            if not config.PIVOT_FALLBACK:
+                error_msg = f"Translation failed for {src}→{tgt}: {str(direct_err)}. Pivot fallback disabled."
+                logger.warning(f"[Translate] Pivot fallback disabled, returning placeholder")
+                return (config.SANITIZE_PLACEHOLDER, False, error_msg)
+
+            # Intelligently select pivot language (avoid using source or target as pivot)
+            pivot_lang = self._select_pivot_language(src, tgt)
+            if not pivot_lang:
+                error_msg = f"Translation failed for {src}→{tgt}: No suitable pivot language available"
+                logger.warning(f"[Translate] No suitable pivot language found, returning placeholder")
+                return (config.SANITIZE_PLACEHOLDER, False, error_msg)
 
             try:
-                trans_src_pivot = model_manager.get_pipeline(src, config.PIVOT_LANG)
-                trans_pivot_tgt = model_manager.get_pipeline(config.PIVOT_LANG, tgt)
+                # For pivot, allow AUTO_MODEL_FALLBACK to try any family (don't restrict to preferred)
+                # This lets mbart50/m2m100 be used for pivot even if opus-mt was originally requested
+                logger.info(f"[Pivot] Attempting pivot translation: {src} → {pivot_lang} → {tgt}")
+                logger.info(f"[Pivot] Loading first leg: {src} → {pivot_lang}")
+                trans_src_pivot = model_manager.get_pipeline(src, pivot_lang, preferred_family=None)
+                logger.info(f"[Pivot] First leg loaded, now loading second leg: {pivot_lang} → {tgt}")
+                trans_pivot_tgt = model_manager.get_pipeline(pivot_lang, tgt, preferred_family=None)
+                logger.info(f"[Pivot] Both legs loaded and cached. Ready to translate.")
 
                 if perform_sentence_splitting:
                     sents = split_sentences(txt)
@@ -141,7 +270,7 @@ class TranslationService:
 
                     combined = config.JOIN_SENTENCES_WITH.join(final)
                     combined = remove_repeating_new_symbols(txt, combined)
-                    return (combined, True)
+                    return (combined, True, None)
                 else:
                     mid = trans_src_pivot([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                     mid_txt = mid[0].get("translation_text", "")
@@ -149,12 +278,41 @@ class TranslationService:
                     fin = trans_pivot_tgt([mid_txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                     base = fin[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
                     base = remove_repeating_new_symbols(txt, base)
-                    return (base, True)
+                    return (base, True, None)
 
             except Exception as pivot_err:
-                if config.REQUEST_LOG:
-                    logger.warning(f"Pivot translate failed: {pivot_err}")
-                return (config.SANITIZE_PLACEHOLDER, False)
+                logger.warning(f"[Pivot] Pivot translation failed: {type(pivot_err).__name__}: {pivot_err}")
+
+                # Last resort: try direct translation with unitary models (mbart50/m2m100)
+                # These multilingual models might support the pair directly even if opus-mt doesn't
+                logger.info(f"[Fallback] Attempting direct translation with unitary models: {src} → {tgt}")
+                for fallback_family in ["mbart50", "m2m100"]:
+                    try:
+                        translator_fallback = model_manager.get_pipeline(src, tgt, preferred_family=fallback_family)
+                        logger.info(f"[Fallback] Loaded {fallback_family} model for direct {src}→{tgt}")
+
+                        if perform_sentence_splitting:
+                            sents = split_sentences(txt)
+                            chunks = chunk_sentences(sents, config.MAX_CHUNK_CHARS)
+                            translated_chunks = self._translate_with_translator(translator_fallback, chunks, eff_beam)
+                            combined = config.JOIN_SENTENCES_WITH.join(translated_chunks)
+                            combined = remove_repeating_new_symbols(txt, combined)
+                            logger.info(f"[Fallback] Success with {fallback_family}: '{combined[:100]}'")
+                            return (combined, False, None)  # Not a pivot, direct translation
+                        else:
+                            res = translator_fallback([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
+                            base = res[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
+                            base = remove_repeating_new_symbols(txt, base)
+                            logger.info(f"[Fallback] Success with {fallback_family}: '{base[:100]}'")
+                            return (base, False, None)  # Not a pivot, direct translation
+                    except Exception as fallback_err:
+                        logger.debug(f"[Fallback] {fallback_family} failed for {src}→{tgt}: {fallback_err}")
+                        continue
+
+                # All fallback attempts failed
+                error_msg = f"Unsupported language pair {src}→{tgt}. No model available (tried opus-mt, pivot via {pivot_lang}, mbart50, m2m100)"
+                logger.error(f"[Fallback] All translation attempts failed for {src}→{tgt}")
+                return (config.SANITIZE_PLACEHOLDER, False, error_msg)
 
     def translate_texts_aligned(
         self,
@@ -164,7 +322,7 @@ class TranslationService:
         eff_beam: int,
         perform_sentence_splitting: bool,
         preferred_family: Optional[str] = None
-    ) -> Tuple[List[str], bool]:
+    ) -> Tuple[List[str], bool, Optional[str]]:
         """Translate list of texts while preserving alignment.
 
         Args:
@@ -176,38 +334,46 @@ class TranslationService:
             preferred_family: Preferred model family (opus-mt, mbart50, m2m100)
 
         Returns:
-            Tuple of (list of translations (same length as input), pivot_used flag)
+            Tuple of (list of translations (same length as input), pivot_used flag, first error if any)
         """
         outputs: List[str] = []
         pivot_used = False
+        first_error: Optional[str] = None
 
         # Try to load direct translator once
         translator_direct = None
+        fallback_to_pivot = False
         try:
             translator_direct = model_manager.get_pipeline(src, tgt, preferred_family)
+            logger.info(f"Loaded direct translator for {src}→{tgt}, will use for all texts")
         except Exception as e:
-            # We will use pivot per-item if available
-            if config.REQUEST_LOG:
-                logger.warning(f"Loading direct pipeline failed; will pivot per item if possible: {e}")
+            # Direct load failed - don't retry with same preferred_family, let pivot/fallback handle it
+            logger.warning(f"Direct pipeline load failed for {src}→{tgt}, will use pivot/fallback per item: {e}")
             pivot_used = True  # Direct pipeline not available
+            fallback_to_pivot = True
 
         for t in input_texts:
             try:
                 txt = t if isinstance(t, str) else ""
-                translated, item_pivot_used = self._translate_text_single(
+                # If direct load failed, pass None for preferred_family to avoid retrying same family
+                translated, item_pivot_used, error = self._translate_text_single(
                     txt, src, tgt, eff_beam, perform_sentence_splitting,
                     translator_direct=translator_direct,
-                    preferred_family=preferred_family
+                    preferred_family=None if fallback_to_pivot else preferred_family
                 )
                 if item_pivot_used:
                     pivot_used = True
+                if error and not first_error:
+                    first_error = error
                 outputs.append(translated if isinstance(translated, str) else config.SANITIZE_PLACEHOLDER)
             except Exception as e:
                 if config.REQUEST_LOG:
                     logger.warning(f"Per-item translation failed, inserting placeholder: {e}")
+                if not first_error:
+                    first_error = f"Translation error: {str(e)}"
                 outputs.append(config.SANITIZE_PLACEHOLDER)
 
-        return (outputs, pivot_used)
+        return (outputs, pivot_used, first_error)
 
     def _auto_chunk_texts(self, texts: List[str]) -> Tuple[List[str], List[Tuple[int, int]]]:
         """Auto-chunk texts that exceed max chunk size.
@@ -276,7 +442,7 @@ class TranslationService:
         perform_sentence_splitting: bool,
         include_metadata: bool = False,
         preferred_family: Optional[str] = None
-    ) -> Tuple[List[str], bool, Optional[Dict[str, Any]]]:
+    ) -> Tuple[List[str], bool, Optional[Dict[str, Any]], Optional[str]]:
         """Asynchronously translate texts using thread pool.
 
         Args:
@@ -289,7 +455,7 @@ class TranslationService:
             preferred_family: Preferred model family (opus-mt, mbart50, m2m100)
 
         Returns:
-            Tuple of (list of translations, pivot_used flag, optional metadata dict)
+            Tuple of (list of translations, pivot_used flag, optional metadata dict, optional error message)
         """
         loop = asyncio.get_event_loop()
 
@@ -299,7 +465,7 @@ class TranslationService:
         total_chunks = sum(num_chunks for _, num_chunks in chunk_map)
 
         # Translate chunked texts
-        translations, pivot_used = await loop.run_in_executor(
+        translations, pivot_used, error = await loop.run_in_executor(
             self.executor,
             self.translate_texts_aligned,
             chunked_texts,
@@ -315,7 +481,7 @@ class TranslationService:
 
         # Build metadata if requested
         metadata = None
-        if include_metadata:
+        if include_metadata or error:
             # Get model info
             try:
                 model_name, src_lang, tgt_lang = model_manager._get_model_name_and_langs(src, tgt)
@@ -339,7 +505,7 @@ class TranslationService:
                 "auto_chunked": auto_chunked
             }
 
-        return (final_translations, pivot_used, metadata)
+        return (final_translations, pivot_used, metadata, error)
 
 
 # We'll instantiate this in the main app with the executor

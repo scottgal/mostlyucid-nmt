@@ -9,7 +9,7 @@ from src.config import config
 from src.core.cache import LRUPipelineCache
 from src.core.device import device_manager
 from src.core.logging import logger
-from src.core.download_progress import setup_hf_progress
+from src.core.download_progress import setup_hf_progress, show_download_banner, show_download_complete
 from src.exceptions import ModelLoadError
 
 # Enable beautiful download progress bars
@@ -36,13 +36,20 @@ class ModelManager:
             True if the pair is supported
         """
         if family == "mbart50":
-            return src in config.MBART50_LANGS and tgt in config.MBART50_LANGS and src != tgt
+            result = src in config.MBART50_LANGS and tgt in config.MBART50_LANGS and src != tgt
+            logger.info(f"[_is_pair_supported] mbart50: src({src}) in langs={src in config.MBART50_LANGS}, tgt({tgt}) in langs={tgt in config.MBART50_LANGS}, src!=tgt={src != tgt} => {result}")
+            return result
         elif family == "m2m100":
-            return src in config.M2M100_LANGS and tgt in config.M2M100_LANGS and src != tgt
+            result = src in config.M2M100_LANGS and tgt in config.M2M100_LANGS and src != tgt
+            logger.info(f"[_is_pair_supported] m2m100: src({src}) in langs={src in config.M2M100_LANGS}, tgt({tgt}) in langs={tgt in config.M2M100_LANGS}, src!=tgt={src != tgt} => {result}")
+            return result
         elif family == "opus-mt":
             # For Opus-MT, we'd ideally check if the model exists on HuggingFace
             # For now, we assume it's available (will fail at load time if not)
-            return src in config.SUPPORTED_LANGS and tgt in config.SUPPORTED_LANGS and src != tgt
+            result = src in config.SUPPORTED_LANGS and tgt in config.SUPPORTED_LANGS and src != tgt
+            logger.info(f"[_is_pair_supported] opus-mt: src({src}) in langs={src in config.SUPPORTED_LANGS}, tgt({tgt}) in langs={tgt in config.SUPPORTED_LANGS}, src!=tgt={src != tgt} => {result}")
+            return result
+        logger.info(f"[_is_pair_supported] unknown family: {family} => False")
         return False
 
     def _get_model_name_and_langs(self, src: str, tgt: str, family: Optional[str] = None) -> tuple[str, str, str, str]:
@@ -106,26 +113,37 @@ class ModelManager:
         # Determine which model family to use
         families_to_try = []
 
+        logger.info(f"[ModelManager] AUTO_MODEL_FALLBACK={config.AUTO_MODEL_FALLBACK}, preferred_family={preferred_family}")
+
         if preferred_family:
             # User requested specific family - try it first
-            if self._is_pair_supported(src, tgt, preferred_family):
-                families_to_try.append(preferred_family)
+            logger.info(f"[ModelManager] User requested family: {preferred_family}")
+            families_to_try.append(preferred_family)  # Always try preferred first
 
-            # If preferred family doesn't support the pair, fall back if enabled
-            if config.AUTO_MODEL_FALLBACK and not families_to_try:
+            # If AUTO_MODEL_FALLBACK enabled, add fallback families too
+            # This allows falling back even if preferred family "should" support the pair
+            # but the actual model doesn't exist (e.g., Helsinki-NLP/opus-mt-en-bn)
+            if config.AUTO_MODEL_FALLBACK:
+                logger.info(f"[ModelManager] AUTO_MODEL_FALLBACK enabled, adding fallback families after {preferred_family}")
                 fallback_families = [f.strip() for f in config.MODEL_FALLBACK_ORDER.split(",") if f.strip()]
                 for family in fallback_families:
-                    if family != preferred_family and self._is_pair_supported(src, tgt, family):
-                        families_to_try.append(family)
+                    if family != preferred_family and family not in families_to_try:
+                        if self._is_pair_supported(src, tgt, family):
+                            families_to_try.append(family)
         elif config.AUTO_MODEL_FALLBACK:
             # Parse fallback order
+            logger.info(f"[ModelManager] No preferred family, using AUTO_MODEL_FALLBACK")
             fallback_families = [f.strip() for f in config.MODEL_FALLBACK_ORDER.split(",") if f.strip()]
+            logger.info(f"[ModelManager] Fallback order: {fallback_families}")
             # Filter to only supported families for this pair
             for family in fallback_families:
-                if self._is_pair_supported(src, tgt, family):
+                supported = self._is_pair_supported(src, tgt, family)
+                logger.info(f"[ModelManager] _is_pair_supported({src}, {tgt}, {family}) = {supported}")
+                if supported:
                     families_to_try.append(family)
         else:
             # No fallback, use configured family only
+            logger.info(f"[ModelManager] AUTO_MODEL_FALLBACK disabled, using only {config.MODEL_FAMILY}")
             families_to_try = [config.MODEL_FAMILY]
 
         if not families_to_try:
@@ -146,16 +164,15 @@ class ModelManager:
                 if family != config.MODEL_FAMILY:
                     logger.info(f"Using fallback model family '{family}' for {src}->{tgt} (primary '{config.MODEL_FAMILY}' not available)")
 
-                # Show nice loading message
+                # Show nice loading message with download size
                 logger.info(f"Loading translation model: {model_name} ({src}->{tgt})")
 
-                # If on a TTY, show a nice header
-                if sys.stdout.isatty() or os.getenv("FORCE_PROGRESS_BAR", "0") == "1":
-                    print(f"\n{'='*80}")
-                    print(f"  Loading Model: {model_name}")
-                    print(f"  Direction: {src} → {tgt}")
-                    print(f"  Family: {family}")
-                    print(f"{'='*80}\n")
+                # Determine device name for logging
+                device_name = "CPU" if device_manager.device_index == -1 else f"GPU (cuda:{device_manager.device_index})"
+                logger.info(f"[ModelManager] Loading {family} model on {device_name}")
+
+                # Show download banner with size information
+                show_download_banner(model_name, src=src, tgt=tgt, family=family, device=device_name)
 
                 if config.REQUEST_LOG:
                     logger.debug(f"Pipeline cache miss: {key}, loading model {model_name} (family: {family})")
@@ -193,17 +210,27 @@ class ModelManager:
 
                 pl = pipeline("translation", **pipeline_kwargs)
 
-                self.cache.put(key, pl)
+                # Store in cache with ACTUAL family used, not requested family
+                # This ensures multilingual models can be reused across different requests
+                actual_key = f"{src}->{tgt}:{family}"
+                self.cache.put(actual_key, pl)
 
-                # Show success message
-                if sys.stdout.isatty() or os.getenv("FORCE_PROGRESS_BAR", "0") == "1":
-                    print(f"\n{'='*80}")
-                    print(f"  ✓ Model loaded successfully!")
-                    print(f"  Model: {model_name}")
-                    print(f"  Ready for translation: {src} → {tgt}")
-                    print(f"{'='*80}\n")
+                # Also store under requested family key if different (for cache hits next time)
+                if actual_key != key:
+                    self.cache.put(key, pl)
+                    logger.debug(f"[ModelManager] Cached model under both {actual_key} and {key}")
 
-                logger.info(f"Successfully loaded model: {model_name} ({src}->{tgt}) using family '{family}'")
+                # Confirm device placement
+                model_device = getattr(pl.model, 'device', None)
+                if model_device:
+                    logger.info(f"[ModelManager] Model loaded on device: {model_device}")
+                else:
+                    logger.info(f"[ModelManager] Model loaded (device: {device_name})")
+
+                # Show completion banner
+                show_download_complete(model_name, src=src, tgt=tgt)
+
+                logger.info(f"Successfully loaded model: {model_name} ({src}->{tgt}) using family '{family}' on {device_name}")
                 return pl
 
             except Exception as e:

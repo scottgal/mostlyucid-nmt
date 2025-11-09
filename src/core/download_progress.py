@@ -2,9 +2,9 @@
 
 import os
 import sys
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Tuple
 from tqdm import tqdm
-from huggingface_hub import HfFileSystem
+from huggingface_hub import HfApi, hf_hub_download
 
 from src.core.logging import logger
 
@@ -85,6 +85,123 @@ def get_download_progress() -> DownloadProgressBar:
         Global DownloadProgressBar instance
     """
     return _download_progress
+
+
+def get_model_download_size(model_name: str) -> Tuple[int, List[str]]:
+    """Get total download size and list of files for a model.
+
+    Args:
+        model_name: HuggingFace model name (e.g., "Helsinki-NLP/opus-mt-en-de")
+
+    Returns:
+        Tuple of (total_bytes, list of main file names)
+    """
+    try:
+        api = HfApi()
+        # Get model files info
+        files = api.list_repo_files(model_name, repo_type="model")
+
+        # Filter to main model files (exclude .git, .md, etc.)
+        main_extensions = ['.bin', '.safetensors', '.json', '.txt', '.model', '.spm', '.vocab']
+        main_files = [f for f in files if any(f.endswith(ext) for ext in main_extensions)]
+
+        # Get file sizes
+        model_info = api.model_info(model_name, files_metadata=True)
+        total_size = 0
+        file_names = []
+
+        if hasattr(model_info, 'siblings') and model_info.siblings:
+            for file_info in model_info.siblings:
+                if file_info.rfilename in main_files:
+                    if hasattr(file_info, 'size') and file_info.size:
+                        total_size += file_info.size
+                    file_names.append(file_info.rfilename)
+
+        return (total_size, file_names[:10])  # Limit to first 10 files for display
+    except Exception as e:
+        logger.debug(f"Could not fetch model size for {model_name}: {e}")
+        return (0, [])
+
+
+def format_bytes(bytes_val: int) -> str:
+    """Format bytes as human-readable string.
+
+    Args:
+        bytes_val: Number of bytes
+
+    Returns:
+        Formatted string (e.g., "1.2 GB", "500 MB")
+    """
+    if bytes_val < 1024:
+        return f"{bytes_val} B"
+    elif bytes_val < 1024**2:
+        return f"{bytes_val / 1024:.1f} KB"
+    elif bytes_val < 1024**3:
+        return f"{bytes_val / (1024**2):.1f} MB"
+    else:
+        return f"{bytes_val / (1024**3):.2f} GB"
+
+
+def show_download_banner(model_name: str, src: str = "", tgt: str = "", family: str = "", device: str = ""):
+    """Show an informative banner before downloading a model.
+
+    Args:
+        model_name: HuggingFace model name
+        src: Source language (optional)
+        tgt: Target language (optional)
+        family: Model family (optional)
+        device: Device name (e.g., "GPU (cuda:0)" or "CPU") (optional)
+    """
+    if not (sys.stdout.isatty() or os.getenv("FORCE_PROGRESS_BAR", "0") == "1"):
+        return
+
+    # Get model size
+    total_bytes, files = get_model_download_size(model_name)
+
+    print("\n" + "="*100)
+    print(f"  🚀 DOWNLOADING MODEL")
+    print(f"  Model: {model_name}")
+    if family:
+        print(f"  Family: {family}")
+    if src and tgt:
+        print(f"  Direction: {src} → {tgt}")
+    if device:
+        print(f"  Device: {device}")
+    if total_bytes > 0:
+        print(f"  Total Size: {format_bytes(total_bytes)}")
+        if files:
+            print(f"  Files: {len(files)} main files")
+    else:
+        print(f"  Size: (fetching...)")
+    print("="*100)
+    print()
+
+    # Log detailed info
+    if total_bytes > 0:
+        logger.info(f"Downloading {model_name}: {format_bytes(total_bytes)} across {len(files)} files")
+    else:
+        logger.info(f"Downloading {model_name}: size unknown, fetching from HuggingFace Hub")
+
+
+def show_download_complete(model_name: str, src: str = "", tgt: str = ""):
+    """Show completion banner after model download.
+
+    Args:
+        model_name: HuggingFace model name
+        src: Source language (optional)
+        tgt: Target language (optional)
+    """
+    if not (sys.stdout.isatty() or os.getenv("FORCE_PROGRESS_BAR", "0") == "1"):
+        return
+
+    print()
+    print("="*100)
+    print(f"  ✅ MODEL READY")
+    print(f"  Model: {model_name}")
+    if src and tgt:
+        print(f"  Translation: {src} → {tgt} is now available")
+    print("="*100)
+    print()
 
 
 def setup_hf_progress():

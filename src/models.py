@@ -32,6 +32,7 @@ class TranslateResponse(BaseModel):
 
     translations: List[str] = Field(..., description="Translated texts")
     pivot_path: Union[str, None] = Field(default=None, description="Pivot translation path if used (e.g., 'ja->en->de')")
+    error: Optional[str] = Field(default=None, description="Error message if translation failed")
 
 
 class TranslationMetadata(BaseModel):
@@ -57,6 +58,7 @@ class TranslatePostResponse(BaseModel):
     translation_time: float = Field(..., description="Translation duration in seconds")
     pivot_path: Union[str, None] = Field(default=None, description="Pivot translation path if used (e.g., 'ja->en->de')")
     metadata: Optional[TranslationMetadata] = Field(default=None, description="Optional metadata about the translation")
+    error: Optional[str] = Field(default=None, description="Error message if translation failed")
 
 
 class LanguageDetectionPostBody(BaseModel):

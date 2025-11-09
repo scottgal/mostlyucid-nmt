@@ -65,10 +65,17 @@ async def lifespan(app: FastAPI):
         _translation_service = TranslationService(_backend_executor)
         logger.info(f"Translation service initialized: {_translation_service}")
 
+        # Log cache configuration
+        logger.info(f"💾 Model cache configured: MAX_CACHED_MODELS={config.MAX_CACHED_MODELS}")
+        logger.info(f"   Keeps up to {config.MAX_CACHED_MODELS} models loaded for instant switching (no reload wait)")
+        logger.info(f"   Oldest models auto-evicted when cache full")
+
         # Preload models if requested
         if config.PRELOAD_MODELS:
             logger.info(f"Preloading models: {config.PRELOAD_MODELS}")
             model_manager.preload_models(config.PRELOAD_MODELS)
+            # Show cache status after preload
+            model_manager.cache.log_status()
 
         # Start maintenance task
         _maintenance_task_handle = asyncio.create_task(_maintenance_task())

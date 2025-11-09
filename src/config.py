@@ -86,8 +86,11 @@ class Config:
     EASYNMT_BATCH_SIZE: int = int(os.getenv("EASYNMT_BATCH_SIZE", "16"))
     EASYNMT_RESPONSE_MODE: str = os.getenv("EASYNMT_RESPONSE_MODE", "strings").lower()  # "strings" or "objects"
 
-    # Cache
-    MAX_CACHED_MODELS: int = int(os.getenv("MAX_CACHED_MODELS", "6"))
+    # Cache - Keep multiple models loaded in memory (GPU/CPU) for instant switching
+    # Each cached model takes ~300MB-2GB of RAM/VRAM depending on model family
+    # Increase this to keep more models loaded (no reload wait time)
+    # Decrease if running out of memory
+    MAX_CACHED_MODELS: int = int(os.getenv("MAX_CACHED_MODELS", "10"))
 
     # Worker pools
     MAX_WORKERS_BACKEND: int = int(os.getenv("MAX_WORKERS_BACKEND", "1"))

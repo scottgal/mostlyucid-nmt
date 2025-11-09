@@ -26,6 +26,219 @@ Features:
 - Structured logging with optional file rotation for long-running stability
 
 
+## 🚀 Latest Updates - v3.1
+
+### Major Reliability & User Experience Enhancements
+
+Version 3.1 focuses on **bulletproof reliability** and **transparency** - making the service "always recover gracefully" with clear visibility into what's happening.
+
+#### 1. Smart Model Caching with Visibility 💾
+**Keep multiple models loaded for instant switching!**
+
+- **Increased default cache**: Now keeps up to **10 models** loaded in memory (GPU/CPU) for instant switching without reload wait
+- **Enhanced visibility**: Clear logging with emoji indicators showing cache hits (✓), misses (✗), and evictions (⚠️)
+- **Smart eviction**: Automatically frees GPU memory when cache is full
+- **Zero reload time**: Switch between language pairs instantly when models are cached
+
+```bash
+# Configure cache size (default: 10 models)
+MAX_CACHED_MODELS=10
+```
+
+**Example logs:**
+```
+💾 Model cache configured: MAX_CACHED_MODELS=10
+   Keeps up to 10 models loaded for instant switching (no reload wait)
+   Oldest models auto-evicted when cache full
+✓ Cache HIT: Reusing loaded model for en->de (5/10 models in cache)
+✗ Cache MISS: Need to load model for fr->de (5/10 models in cache)
+💾 Cached model: fr->de (6/10 models in cache)
+⚠️  Cache FULL! Evicting oldest model: en->es (to make room for de->fr)
+```
+
+#### 2. Enhanced Download Progress with Size Information 🚀
+**Know exactly what's downloading and how long it'll take!**
+
+Before v3.1, long model downloads (3+ minutes) looked like the service had hung. Now you get:
+
+- **Pre-download size estimation**: Queries HuggingFace API to show total download size BEFORE starting
+- **Beautiful download banners**: Shows model name, family, direction, device, total size, and file count
+- **Completion confirmation**: Clear banner when download finishes
+- **Device visibility**: Always shows whether using CPU or GPU
+
+**Example output:**
+```
+====================================================================================================
+  🚀 DOWNLOADING MODEL
+  Model: Helsinki-NLP/opus-mt-en-bn
+  Family: opus-mt
+  Direction: en → bn
+  Device: GPU (cuda:0)
+  Total Size: 298.5 MB
+  Files: 8 main files
+====================================================================================================
+Fetching 8 files: 100%|████████████████████████████████████| 8/8 [03:12<00:00, 24.1s/it]
+====================================================================================================
+  ✅ DOWNLOAD COMPLETE
+  Model: Helsinki-NLP/opus-mt-en-bn (en → bn)
+====================================================================================================
+```
+
+#### 3. Data-Driven Intelligent Pivot Selection 🎯
+**No more blind pivot attempts that fail!**
+
+Previously, pivot translation would try arbitrary intermediary languages (e.g., en→es→bn) even when the second leg (es→bn) didn't exist, wasting time and causing errors.
+
+**Now uses mathematical set intersection:**
+- Finds all languages reachable FROM source (src→X exists)
+- Finds all languages that can reach target (X→tgt exists)
+- Computes intersection: languages where BOTH legs exist
+- Selects best pivot from valid candidates using priority order
+
+**Example:** For English→Bengali:
+```
+Before (v3.0):
+  Trying pivot: en → es → bn
+  Loading Helsinki-NLP/opus-mt-es-bn... FAILED (model doesn't exist)
+  Trying pivot: en → fr → bn
+  Loading Helsinki-NLP/opus-mt-fr-bn... FAILED (model doesn't exist)
+
+After (v3.1):
+  Checking which languages work for BOTH en→X AND X→bn...
+  Found valid pivots: {hi, mr, ta, te} (Indian languages with both legs)
+  Selected pivot: hi (highest priority Indian language)
+  Loading Helsinki-NLP/opus-mt-en-hi... SUCCESS
+  Loading Helsinki-NLP/opus-mt-hi-bn... SUCCESS
+  Translation via en → hi → bn completed!
+```
+
+**Configuration:**
+```bash
+PIVOT_FALLBACK=1               # Enable intelligent pivot (default: ON)
+PIVOT_LANG=en                  # Preferred pivot language
+MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"  # Priority order
+```
+
+#### 4. Fixed Automatic Fallback - No More Double-Tries! 🔧
+**Critical fix: Stop retrying the same model twice**
+
+Previously, when requesting a specific model family (e.g., opus-mt) for a pair that didn't exist, the service would:
+1. Try the requested family
+2. Retry the SAME family again (wasting time)
+3. Never try fallback families even with AUTO_MODEL_FALLBACK enabled
+
+**Now fixed:**
+- Always adds fallback families when `AUTO_MODEL_FALLBACK=1` (even if preferred family "should" work)
+- Each family is tried only ONCE
+- Automatic fallback works reliably
+
+**Example:** Request opus-mt for English→Bengali (doesn't exist in Opus-MT):
+```
+Before (v3.0):
+  Trying families for en->bn: ['opus-mt']
+  Loading Helsinki-NLP/opus-mt-en-bn... FAILED
+  Loading Helsinki-NLP/opus-mt-en-bn... FAILED (trying again!)
+  Translation failed
+
+After (v3.1):
+  Trying families for en->bn: ['opus-mt', 'mbart50', 'm2m100']
+  Loading Helsinki-NLP/opus-mt-en-bn... FAILED
+  Using fallback model family 'mbart50' for en->bn
+  Loading facebook/mbart-large-50-many-to-many-mmt... SUCCESS
+  Translation completed with mbart50!
+```
+
+**Configuration:**
+```bash
+AUTO_MODEL_FALLBACK=1                          # Enable auto-fallback (default: ON)
+MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"  # Try opus-mt first, then mbart50, then m2m100
+```
+
+#### 5. GPU Device Clarity 🖥️
+**Always know which device is being used!**
+
+Added extensive device logging throughout the model loading pipeline to eliminate confusion:
+
+- Device shown in download banners
+- Device confirmed after model loads
+- Device included in success messages
+- Clear distinction between CPU, GPU (cuda:0), etc.
+
+**Example logs:**
+```
+[ModelManager] Loading opus-mt model on GPU (cuda:0)
+[ModelManager] Model loaded on device: cuda:0
+Successfully loaded model: Helsinki-NLP/opus-mt-en-de (en->de) using family 'opus-mt' on GPU (cuda:0)
+```
+
+**For ALL model families** (Opus-MT, mBART50, M2M100) - GPU is used when enabled!
+
+#### 6. Pivot Model Caching ♻️
+**Both legs of pivot translation are cached!**
+
+When using pivot translation (e.g., en→hi→bn), both intermediate models are cached separately:
+- First leg (en→hi) cached for reuse
+- Second leg (hi→bn) cached for reuse
+- Future translations can reuse either leg independently
+
+**Example:** After translating en→bn via hi pivot:
+```
+✓ Cache HIT: Reusing loaded model for en->hi (7/10 models in cache)
+✓ Cache HIT: Reusing loaded model for hi->bn (7/10 models in cache)
+```
+
+Next translation using en→hi (different target) reuses the first leg instantly!
+
+#### 7. Per-Request Model Selection 🎛️
+**Client can specify model family per request!**
+
+The demo UI and API support per-request model family selection:
+
+```bash
+# Request specific model family via query parameter or POST body
+curl -X POST http://localhost:8000/translate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "text": ["Hello world"],
+    "target_lang": "de",
+    "source_lang": "en",
+    "model_family": "mbart50"
+  }'
+```
+
+**Benefits:**
+- Test different model families without restarting service
+- Use best model family for each language pair
+- Compare translation quality across families
+- Demo UI dropdown switches model family per translation
+
+---
+
+### Summary: v3.1 = Reliability + Transparency
+
+**Out-of-the-box reliability:**
+- ✅ No more double-tries or wasted model loads
+- ✅ Intelligent pivot selection that only tries valid paths
+- ✅ Automatic fallback across model families
+- ✅ Graceful recovery from all failure modes
+
+**Clear visibility:**
+- ✅ Download progress with sizes and device info
+- ✅ Cache status with emoji indicators
+- ✅ Device placement always logged
+- ✅ Pivot selection reasoning visible in logs
+
+**Configuration:**
+```bash
+# Recommended v3.1 settings for maximum reliability
+AUTO_MODEL_FALLBACK=1                          # ON by default
+PIVOT_FALLBACK=1                               # ON by default
+MAX_CACHED_MODELS=10                           # Increased from 6
+MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"  # Quality-first fallback
+```
+
+---
+
 ## 🚀 Latest Updates - v3.0
 
 ### 1. EasyNMT Compatibility Namespace (/compat)
@@ -450,6 +663,46 @@ docker run --gpus all -p 8000:8000 \
 ## API
 The API matches EasyNMT routes and shapes where applicable. Swagger UI is available at `/docs`.
 
+### Quick API Testing
+
+Three test scripts are provided to verify all v3.1 features:
+
+**Python script (comprehensive, color output):**
+```bash
+# Install requests if needed
+pip install requests
+
+# Run comprehensive test suite
+python test_api_comprehensive.py
+```
+
+**Bash script (Linux/Mac):**
+```bash
+chmod +x test_api_quick.sh
+./test_api_quick.sh
+```
+
+**Windows batch file:**
+```cmd
+test_api_quick.bat
+```
+
+These scripts test:
+- ✅ Basic translation pairs (opus-mt)
+- ✅ Automatic fallback scenarios (mbart50/m2m100)
+- ✅ Explicit model family selection
+- ✅ Pivot translation with intelligent selection
+- ✅ Cache behavior across requests
+- ✅ Batch translation
+- ✅ Multiple model switching
+
+**Check server logs during tests to see:**
+- Download progress banners with sizes
+- Cache HIT/MISS indicators (✓/✗/💾/⚠️)
+- Model family fallback decisions
+- Intelligent pivot selection reasoning
+- GPU/CPU device placement
+
 ### `/translate` GET
 Translates texts passed as repeated `text=` query params.
 
@@ -751,7 +1004,7 @@ Defaults are shown in parentheses.
 - `MODEL_CACHE_DIR` = path (unset) — directory to cache downloaded models (useful with Docker volumes).
 - `EASYNMT_MODEL` = `opus-mt` (`opus-mt`) — legacy compatibility, prefer `MODEL_FAMILY`.
 - `EASYNMT_MODEL_ARGS` = JSON string (`{}`) — forwarded to `transformers.pipeline` (allowed keys: `revision`, `trust_remote_code`, `cache_dir`, `use_fast`, `torch_dtype` where `"fp16"|"bf16"|"fp32"`). If `MODEL_CACHE_DIR` is set, `cache_dir` is automatically added.
-- `MAX_CACHED_MODELS` = int (`6`) — LRU capacity of in-memory pipelines. Eviction frees VRAM when on GPU.
+- `MAX_CACHED_MODELS` = int (`10`) — LRU capacity of in-memory pipelines. **v3.1: Increased from 6 to 10** for better instant switching between language pairs. Eviction frees VRAM when on GPU. Set higher to keep more models loaded, or lower if running out of memory.
 
 **Auto-fallback example:** If `MODEL_FAMILY=opus-mt` but you request Ukrainian→French (not available in Opus-MT), the system automatically tries mBART50 or M2M100 based on `MODEL_FALLBACK_ORDER`. This ensures maximum language pair coverage while prioritizing quality.
 
