@@ -5,10 +5,14 @@ This guide covers deploying mostlylucid-nmt on Raspberry Pi (ARM64 architecture)
 ## Requirements
 
 ### Hardware
-- **Raspberry Pi 4 or 5** (recommended)
-  - Minimum 4GB RAM (8GB highly recommended)
-  - 32GB+ SD card or SSD (models need storage)
-  - Active cooling recommended (translation is CPU-intensive)
+- **Raspberry Pi 5 with 8GB RAM + NVMe SSD** (HIGHLY recommended)
+  - NVMe SSD via HAT is **critical** for good performance (10x faster than SD card)
+  - Active cooling required (CPU-intensive workload)
+  - Official 27W power supply
+
+- **Raspberry Pi 4 with 8GB RAM + SSD** (acceptable performance)
+  - USB 3.0 SSD is **highly recommended** over SD card
+  - Active cooling recommended
 
 - **Raspberry Pi 3B+** (supported but slow)
   - Minimum 1GB RAM (very limited capacity)
@@ -421,10 +425,31 @@ hostname -I
 - Monitor cache/memory at http://localhost:8000/cache
 - See main README.md for API usage examples
 
+## Performance Optimizations
+
+The ARM64 image includes comprehensive optimizations specifically for Raspberry Pi:
+
+- **Memory-mapped model loading** - Models stay on SSD, paged into RAM on-demand (requires SSD!)
+- **Aggressive memory monitoring** - Auto-evicts at 70% RAM (down from 85%)
+- **CPU thread tuning** - Optimal thread counts for ARM Cortex CPUs
+- **Streaming downloads** - Models download directly to SSD without RAM buffering
+- **Garbage collection** - Aggressive cleanup after evictions
+
+**For detailed explanation of all optimizations, see [RASPBERRY-PI-OPTIMIZATIONS.md](RASPBERRY-PI-OPTIMIZATIONS.md)**
+
+### Quick Performance Tips
+
+1. **Use SSD, not SD card** - 10x faster model loading and inference
+2. **Keep 1 model cached** - `MAX_CACHED_MODELS=1` is optimal for 8GB RAM
+3. **Use mBART50 for multiple languages** - Single 2GB model vs many Opus-MT models
+4. **Monitor temperature** - `vcgencmd measure_temp` (keep <70°C)
+5. **Check memory** - `curl http://localhost:8000/cache` (RAM should be <70%)
+
 ## Support
 
-- Raspberry Pi-specific issues: Check temperature, swap, cooling
-- Translation issues: See main README troubleshooting
-- Performance tuning: Adjust batch size, cache size, memory thresholds
+- **Performance issues**: See [RASPBERRY-PI-OPTIMIZATIONS.md](RASPBERRY-PI-OPTIMIZATIONS.md)
+- **Hardware issues**: Check temperature, ensure SSD is used, verify active cooling
+- **Translation issues**: See main README troubleshooting
+- **Memory issues**: Lower thresholds, reduce cache size, use mBART50
 
 Happy translating on your Raspberry Pi! 🥧🤖

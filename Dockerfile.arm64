@@ -49,7 +49,7 @@ ENV PYTHONUNBUFFERED=1 \
     USE_GPU=false \
     DEVICE=cpu \
     # Conservative memory settings for Raspberry Pi
-    MAX_CACHED_MODELS=2 \
+    MAX_CACHED_MODELS=1 \
     MAX_WORKERS_BACKEND=1 \
     MAX_WORKERS_FRONTEND=1 \
     # Smaller batch size for limited RAM
@@ -58,14 +58,14 @@ ENV PYTHONUNBUFFERED=1 \
     ENABLE_QUEUE=1 \
     MAX_QUEUE_SIZE=50 \
     MAX_INFLIGHT_TRANSLATIONS=1 \
-    # Memory monitoring - critical for Pi!
+    # Memory monitoring - MORE AGGRESSIVE for Pi!
     ENABLE_MEMORY_MONITOR=1 \
-    MEMORY_WARNING_THRESHOLD=75.0 \
-    MEMORY_CRITICAL_THRESHOLD=85.0 \
-    MEMORY_CHECK_INTERVAL=3 \
+    MEMORY_WARNING_THRESHOLD=60.0 \
+    MEMORY_CRITICAL_THRESHOLD=70.0 \
+    MEMORY_CHECK_INTERVAL=2 \
     # Model family - opus-mt recommended for Pi
     MODEL_FAMILY=opus-mt \
-    # Cache directory
+    # Cache directory (on SSD for best performance)
     MODEL_CACHE_DIR=/models \
     # Logging
     LOG_LEVEL=INFO \
@@ -74,7 +74,16 @@ ENV PYTHONUNBUFFERED=1 \
     WEB_CONCURRENCY=1 \
     TIMEOUT=300 \
     GRACEFUL_TIMEOUT=30 \
-    KEEP_ALIVE=5
+    KEEP_ALIVE=5 \
+    # PyTorch CPU optimizations
+    OMP_NUM_THREADS=3 \
+    MKL_NUM_THREADS=3 \
+    OPENBLAS_NUM_THREADS=3 \
+    # HuggingFace optimizations
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    DISABLE_TELEMETRY=1 \
+    # Python optimizations
+    PYTHONDONTWRITEBYTECODE=1
 
 # Expose port
 EXPOSE 8000

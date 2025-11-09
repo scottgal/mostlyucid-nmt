@@ -28,18 +28,22 @@ jobs:
             dockerfile: Dockerfile
             tags_suffix: cpu
             is_latest: true
+            platforms: linux/amd64,linux/arm64
           - variant: cpu-min
             dockerfile: Dockerfile.min
             tags_suffix: cpu-min
             is_latest: false
+            platforms: linux/amd64,linux/arm64
           - variant: gpu
             dockerfile: Dockerfile.gpu
             tags_suffix: gpu
             is_latest: false
+            platforms: linux/amd64
           - variant: gpu-min
             dockerfile: Dockerfile.gpu.min
             tags_suffix: gpu-min
             is_latest: false
+            platforms: linux/amd64
 
     steps:
       - name: Checkout
@@ -97,7 +101,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           pull: true
           push: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          platforms: linux/amd64
+          platforms: ${{ matrix.platforms }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -125,6 +129,8 @@ jobs:
             echo "### ✅ Built (not pushed): ${{ matrix.variant }}" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** ${{ matrix.platforms }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:${{ matrix.tags_suffix }}" >> $GITHUB_STEP_SUMMARY
@@ -137,5 +143,5 @@ jobs:
           if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]; then
             echo "**Status:** Pushed to Docker Hub and GHCR" >> $GITHUB_STEP_SUMMARY
           else
-            echo "**Status:** Build-only (push to main branch)" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Build-only (not pushed to main branch)" >> $GITHUB_STEP_SUMMARY
           fi

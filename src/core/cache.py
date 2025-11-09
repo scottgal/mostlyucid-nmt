@@ -193,6 +193,13 @@ class LRUPipelineCache(OrderedDict):
             except Exception as e:
                 logger.debug(f"Error clearing CUDA cache: {e}")
 
+        # Pi-specific: aggressive memory cleanup
+        try:
+            from src.core.pi_optimizations import pi_optimizer
+            pi_optimizer.aggressive_cleanup()
+        except:
+            pass
+
         # Log memory after eviction
         ram_pct, ram_used_gb, ram_total_gb = self._get_system_memory_usage()
         logger.info(f"💾 RAM after eviction: {ram_pct:.1f}% ({ram_used_gb:.1f}GB/{ram_total_gb:.1f}GB)")

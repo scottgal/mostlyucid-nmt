@@ -32,7 +32,9 @@
       "Bash(dir /B /O-D E:sourcemostlylucid-nmt*.log 2)",
       "Bash(nul)",
       "Bash(k6 version:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(docker buildx:*)",
+      "Bash(docker info:*)"
     ],
     "deny": [],
     "ask": []

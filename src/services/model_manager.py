@@ -10,10 +10,15 @@ from src.core.cache import LRUPipelineCache
 from src.core.device import device_manager
 from src.core.logging import logger
 from src.core.download_progress import setup_hf_progress, show_download_banner, show_download_complete
+from src.core.pi_optimizations import pi_optimizer
 from src.exceptions import ModelLoadError
 
 # Enable beautiful download progress bars
 setup_hf_progress()
+
+# Configure Pi-specific model caching if on Raspberry Pi
+if config.MODEL_CACHE_DIR:
+    pi_optimizer.enable_model_caching_to_disk(config.MODEL_CACHE_DIR)
 
 
 class ModelManager:
@@ -182,10 +187,16 @@ class ModelManager:
                 # Remove cache_dir from pipeline kwargs (transformers uses default HF cache)
                 filtered_kwargs = {k: v for k, v in self.pipeline_kwargs.items() if k != "cache_dir"}
 
+                # Get Pi-specific optimizations
+                pi_kwargs = pi_optimizer.get_pipeline_kwargs()
+                model_kwargs = pi_optimizer.get_model_loading_kwargs()
+
                 pipeline_kwargs = {
                     "model": model_name,
                     "device": device_manager.device_index,
-                    **filtered_kwargs
+                    "model_kwargs": model_kwargs,  # Pass optimizations to model loading
+                    **filtered_kwargs,
+                    **pi_kwargs,  # Pi optimizations override defaults
                 }
 
                 # If running a prepacked image with preloaded models, prefer the on-disk snapshot
@@ -209,6 +220,10 @@ class ModelManager:
                     pipeline_kwargs["tgt_lang"] = tgt_lang
 
                 pl = pipeline("translation", **pipeline_kwargs)
+
+                # Apply Pi-specific post-load optimizations
+                if hasattr(pl, 'model'):
+                    pi_optimizer.optimize_after_model_load(pl.model)
 
                 # Store in cache with ACTUAL family used, not requested family
                 # This ensures multilingual models can be reused across different requests
