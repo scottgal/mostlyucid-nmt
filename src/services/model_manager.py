@@ -2,6 +2,7 @@
 
 from typing import Any, Optional
 from transformers import pipeline
+import os
 
 from src.config import config
 from src.core.cache import LRUPipelineCache
@@ -132,6 +133,21 @@ class ModelManager:
                     "device": device_manager.device_index,
                     **self.pipeline_kwargs
                 }
+
+                # If running a prepacked image with preloaded models, prefer the on-disk snapshot
+                # even when an external MODEL_CACHE_DIR is configured. This allows overlay behavior:
+                # preloaded models are used, while new downloads go to the external cache.
+                try:
+                    preloaded_root = os.getenv("PRELOADED_MODELS_DIR", "/app/models")
+                    if family == "opus-mt":
+                        preloaded_path = os.path.join(preloaded_root, model_name.replace("/", "--"))
+                        if os.path.isdir(preloaded_path):
+                            pipeline_kwargs["model"] = preloaded_path
+                            if config.REQUEST_LOG:
+                                logger.info(f"Using preloaded model from disk: {preloaded_path}")
+                except Exception:
+                    # Non-fatal; fall back to standard hub resolution
+                    pass
 
                 # For mBART50 and M2M100, we need to specify src_lang and tgt_lang
                 if family in ("mbart50", "m2m100"):

@@ -26,28 +26,44 @@ LABEL org.opencontainers.image.title="mostlylucid-nmt" \
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/app/models \
+    TRANSFORMERS_CACHE=/app/models \
+    HF_DATASETS_CACHE=/app/models \
+    TORCH_HOME=/app/models
 
-# System deps
+# System deps (keep minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
-        python3-venv \
-        build-essential \
-        libssl-dev \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Install Python dependencies excluding torch (we install CUDA torch separately)
 COPY requirements.txt ./
-
-# Install Python deps from requirements first (will install CPU torch, then we upgrade to CUDA wheel)
-# Ubuntu 24.04 requires --break-system-packages for pip installs outside venv
-RUN pip3 install --break-system-packages -r requirements.txt
+RUN grep -v "^torch\>" requirements.txt > requirements.notorch.txt && \
+    pip3 install --break-system-packages --no-cache-dir --no-compile -r requirements.notorch.txt
 
 # Install CUDA-enabled PyTorch matching CUDA 12.4 (compatible with CUDA 12.6 runtime)
 # See https://pytorch.org for the latest index URL mapping
-RUN pip3 install --break-system-packages --upgrade --index-url https://download.pytorch.org/whl/cu124 torch
+RUN pip3 install --break-system-packages --no-cache-dir --no-compile --index-url https://download.pytorch.org/whl/cu124 torch
+
+# Preload a minimal, curated set of Opus-MT models into /app/models to avoid runtime downloads
+# Default build arg preloads EN<->(es,fr,de,it). Prefer specifying explicit pairs via PRELOAD_PAIRS.
+# Override examples:
+#   --build-arg PRELOAD_PAIRS="en->de,de->en,fr->en,en->it"
+#   --build-arg PRELOAD_LANGS="es,fr,de"   # legacy: expands to EN<->XX for each
+ARG PRELOAD_LANGS="es,fr,de,it"
+ARG PRELOAD_PAIRS=""
+RUN mkdir -p /app/models /app/tools
+COPY tools/preload_models.py /app/tools/preload_models.py
+RUN bash -lc 'if [ -n "$PRELOAD_PAIRS" ]; then \
+      python3 -u /app/tools/preload_models.py --family opus-mt --pairs "$PRELOAD_PAIRS" --dest /app/models; \
+    else \
+      python3 -u /app/tools/preload_models.py --family opus-mt --langs "$PRELOAD_LANGS" --dest /app/models; \
+    fi'
 
 COPY src/ ./src/
 COPY public/ ./public/

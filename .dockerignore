@@ -1,0 +1,48 @@
+﻿.git
+.gitignore
+
+# Large caches and model data (use volume mounts instead)
+model-cache/
+models/
+models-cache/
+.cache/
+.huggingface/
+.hf/
+
+# Datasets / outputs
+/data/
+/datasets/
+/outputs/
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Notebooks and local experiments
+*.ipynb
+notebooks/
+
+# Tests are not needed inside runtime images
+/tests/
+
+# IDE/editor junk
+.DS_Store
+.idea/
+.vscode/
+
+# Logs and coverage
+*.log
+coverage/
+htmlcov/

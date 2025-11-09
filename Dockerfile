@@ -22,22 +22,43 @@ LABEL org.opencontainers.image.title="mostlylucid-nmt" \
 # Prevent interactive prompts and reduce image size
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/app/models \
+    TRANSFORMERS_CACHE=/app/models \
+    HF_DATASETS_CACHE=/app/models \
+    TORCH_HOME=/app/models
 
 WORKDIR /app
 
-# System deps for performance (optional) and SSL
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# No extra system deps to keep image smaller (python:3.12-slim already includes what we need)
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --no-compile -r requirements.txt
 
+# Preload a minimal, curated set of Opus-MT models into /app/models to avoid runtime downloads
+# Default build arg preloads EN<->(es,fr,de,it). Prefer specifying explicit pairs via PRELOAD_PAIRS.
+# Override examples:
+#   --build-arg PRELOAD_PAIRS="en->de,de->en,fr->en,en->it"
+#   --build-arg PRELOAD_LANGS="es,fr,de"   # legacy: expands to EN<->XX for each
+ARG PRELOAD_LANGS="es,fr,de,it"
+ARG PRELOAD_PAIRS=""
+RUN mkdir -p /app/models /app/tools
+COPY tools/preload_models.py /app/tools/preload_models.py
+RUN /bin/sh -c 'if [ -n "$PRELOAD_PAIRS" ]; then \
+      python -u /app/tools/preload_models.py --family opus-mt --pairs "$PRELOAD_PAIRS" --dest /app/models; \
+    else \
+      python -u /app/tools/preload_models.py --family opus-mt --langs "$PRELOAD_LANGS" --dest /app/models; \
+    fi'
+
+# Copy source code
 COPY src/ ./src/
 COPY public/ ./public/
 COPY app.py .
+
+# Set default model cache directory to bundled models location
+ENV MODEL_CACHE_DIR=/app/models
 
 EXPOSE 8000
 

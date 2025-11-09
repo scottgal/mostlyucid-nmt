@@ -1,7 +1,7 @@
 # Dockerfile.min - Minimal CPU image with no preloaded models
-# Build: docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:min --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+# Build: docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:cpu-min --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
 # Run with volume mapping for model cache:
-#   docker run -p 8000:8000 -v /path/to/model-cache:/models scottgal/mostlylucid-nmt:min
+#   docker run -p 8000:8000 -v /path/to/model-cache:/models scottgal/mostlylucid-nmt:cpu-min
 FROM python:3.12-slim
 
 # Build arguments for versioning
@@ -24,31 +24,35 @@ LABEL org.opencontainers.image.title="mostlylucid-nmt" \
 # Prevent interactive prompts and reduce image size
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    # Point all caches to the mounted volume to avoid baking anything into the image
+    HF_HOME=/models \
+    TRANSFORMERS_CACHE=/models \
+    HF_DATASETS_CACHE=/models \
+    TORCH_HOME=/models
 
 WORKDIR /app
 
-# System deps for performance (optional) and SSL
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install only what is necessary; python:3.12-slim already has SSL runtime
+# Keep image minimal by avoiding build toolchains
+# (If a dependency needs compilation, switch to the full CPU image)
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
+# Copy source code (small)
 COPY src/ ./src/
 COPY public/ ./public/
 COPY app.py .
 
-# Create directory for model cache (can be mounted as volume)
+# Create directory for model cache (mounted as volume at runtime)
 RUN mkdir -p /models
 
 # Set default model cache directory
 ENV MODEL_CACHE_DIR=/models
 
-# Don't preload any models by default (override with PRELOAD_MODELS env var)
+# Ensure no preload happens by default
 ENV PRELOAD_MODELS=""
 
 EXPOSE 8000

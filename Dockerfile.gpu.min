@@ -26,15 +26,18 @@ LABEL org.opencontainers.image.title="mostlylucid-nmt" \
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    # Point all caches to the mounted volume to avoid baking anything into the image
+    HF_HOME=/models \
+    TRANSFORMERS_CACHE=/models \
+    HF_DATASETS_CACHE=/models \
+    TORCH_HOME=/models
 
-# System deps
+# System deps (keep minimal; Python + certificates)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
-        python3-venv \
-        build-essential \
-        libssl-dev \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

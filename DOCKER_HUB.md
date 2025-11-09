@@ -116,6 +116,49 @@ docker run -d --gpus all -p 8000:8000 \
 - ✅ **Model discovery** - Dynamically query available models
 - ✅ **Persistent cache** - Volume-mapped model storage
 
+## Cache Overlay on Prepack Images
+
+Both `:cpu` and `:gpu` images include a minimal set of preloaded Opus‑MT models inside the image under `/app/models`. You can still map a cache directory, and it works on top of the preloaded set:
+
+```bash
+# CPU prepack with external cache overlay
+docker run -d -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_CACHE_DIR=/models \
+  scottgal/mostlylucid-nmt:cpu
+```
+
+Behavior:
+- Preloaded models are used directly from `/app/models` (zero first‑request latency for those pairs).
+- Any additional models or updates are downloaded into `/models` (your mapped volume), persisting across restarts.
+
+Minimal images (`:cpu-min`, `:gpu-min`) do not include preloaded models. Mapping a cache directory is optional; without it, models will be re-downloaded each run.
+
+## Preloaded set and how to change it
+
+By default, prepack images preload EN<->(es,fr,de,it) for Opus‑MT at build time. This is driven by a Docker build arg:
+
+- `ARG PRELOAD_LANGS="es,fr,de,it"` — legacy convenience that expands to EN<->XX (two repos per language).
+- Preferred: specify explicit direction pairs via `ARG PRELOAD_PAIRS`, since Opus‑MT models are per-direction.
+
+Examples:
+```bash
+# CPU prepack: preload exact pairs (uses smart English pivot when a direct pair is missing)
+docker build -t scottgal/mostlylucid-nmt:cpu \
+  --build-arg PRELOAD_PAIRS="en->de,de->en,fr->en,en->it,ja->de" .
+
+# GPU prepack with pairs
+docker build -f Dockerfile.gpu -t scottgal/mostlylucid-nmt:gpu \
+  --build-arg PRELOAD_PAIRS="en->de,en->fr,fr->en" .
+
+# Legacy: preload by language list (expands to EN<->XX per language)
+docker build -t scottgal/mostlylucid-nmt:cpu \
+  --build-arg PRELOAD_LANGS="es,fr,de" .
+```
+Notes:
+- Smart pivot: For Opus‑MT, if a non‑English direct pair (e.g., `ja->de`) is not available, the preloader will fetch `ja->en` and `en->de` instead, so the runtime can pivot via English.
+- Minimal images (`:cpu-min`, `:gpu-min`) preload nothing by design.
+
 ## Key Configuration
 
 ```bash

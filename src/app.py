@@ -17,6 +17,8 @@ from src.services.model_manager import model_manager
 from src.services.translation_service import TranslationService
 from src.models import TranslatePostBody, LanguageDetectionPostBody
 from src.api.routes import observability, discovery, language
+import os
+import shutil
 
 
 # Global executors and services
@@ -136,6 +138,40 @@ def get_frontend_executor() -> ThreadPoolExecutor:
 app.include_router(observability.router, tags=["Observability"])
 app.include_router(discovery.router, tags=["Discovery"])
 app.include_router(language.router, tags=["Language"])
+
+# EasyNMT compatibility namespace under /compat
+from src.api.routes import compat as compat_handlers
+
+@app.get(
+    "/compat/translate",
+    tags=["Compatibility"],
+    summary="EasyNMT GET /translate (compat)",
+)
+async def compat_translate_get_endpoint(
+    request: Request,
+    target_lang: str = Query(...),
+    text: List[str] = Query(default=[]),
+    source_lang: str = Query(default=""),
+    beam_size: int = Query(default=5),
+    perform_sentence_splitting: bool = Query(default=True),
+    translation_service: TranslationService = Depends(get_translation_service)
+):
+    return await compat_handlers.translate_get_compat(
+        request, translation_service, target_lang, text, source_lang, beam_size, perform_sentence_splitting
+    )
+
+
+@app.post(
+    "/compat/translate",
+    tags=["Compatibility"],
+    summary="EasyNMT POST /translate (compat)",
+)
+async def compat_translate_post_endpoint(
+    request: Request,
+    body: TranslatePostBody,
+    translation_service: TranslationService = Depends(get_translation_service)
+):
+    return await compat_handlers.translate_post_compat(request, body, translation_service)
 
 
 @app.get(

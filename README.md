@@ -26,6 +26,63 @@ Features:
 - Structured logging with optional file rotation for long-running stability
 
 
+## 🚀 Latest Updates - v3.0
+
+### 1. EasyNMT Compatibility Namespace (/compat)
+- New, dedicated endpoints that strictly match EasyNMT response shapes while keeping the enhanced primary API unchanged.
+  - `GET /compat/translate` → `{ "translations": [...] }`
+  - `POST /compat/translate` → `{ "target_lang", "source_lang", "detected_langs" (when auto), "translated", "translation_time" }`
+- Existing `/translate` endpoints continue to support optional extras like `pivot_path` and `metadata`.
+
+### 2. Preloaded Models in Prepack Images (cpu, gpu)
+- CPU `:cpu` and GPU `:gpu` images now include a minimal, curated set of Opus‑MT models preloaded into the image to avoid first-request latency.
+- Default preload set: `es, fr, de, it` as en<->XX (8 model repos total). Stored under `/app/models`.
+- You can change the preloaded set at build time using `--build-arg PRELOAD_LANGS="es,fr,de,it"`.
+  - Default is controlled by the Docker build arg `ARG PRELOAD_LANGS="es,fr,de,it"` (preloads EN<->ES/FR/DE/IT → 8 repos).
+  - To customize at build time:
+    ```bash
+    # CPU prepack, preload EN<->(es,fr,de)
+    docker build -t scottgal/mostlylucid-nmt:cpu \
+      --build-arg PRELOAD_LANGS="es,fr,de" .
+
+    # GPU prepack, preload EN<->(es,fr,de,it,nl)
+    docker build -f Dockerfile.gpu -t scottgal/mostlylucid-nmt:gpu \
+      --build-arg PRELOAD_LANGS="es,fr,de,it,nl" .
+    ```
+  - You can also specify explicit PAIRS to preload at build time (preferred for Opus‑MT since models are per-direction). The build uses pairs first when provided:
+    ```bash
+    # CPU prepack: preload exact pairs (and auto-pivot via English if a direct pair does not exist)
+    docker build -t scottgal/mostlylucid-nmt:cpu \
+      --build-arg PRELOAD_PAIRS="en->de,de->en,fr->en,en->it,ja->de" .
+
+    # GPU prepack with pairs
+    docker build -f Dockerfile.gpu -t scottgal/mostlylucid-nmt:gpu \
+      --build-arg PRELOAD_PAIRS="en->de,en->fr,fr->en" .
+    ```
+    - Smart pivot: For Opus‑MT, if a non-English direct pair is missing (e.g., `ja->de`), the preloader will fetch `ja->en` and `en->de` as a fallback.
+  - Minimal variants (`:cpu-min`, `:gpu-min`) preload nothing by design; they download on-demand unless you map a cache.
+
+### 3. Cache Overlay Support (Prepack Images)
+- You can map an external cache directory and it will work on top of the preloaded models.
+  - Example:
+    ```bash
+    docker run -p 8000:8000 \
+      -v ./model-cache:/models \
+      -e MODEL_CACHE_DIR=/models \
+      scottgal/mostlylucid-nmt:cpu
+    ```
+  - Behavior: preloaded models are used directly from `/app/models`; any new downloads are stored in `/models` (your mapped cache), so they persist between runs.
+
+### 4. Minimal Images: Cache Mapping is Optional
+- Minimal images (`:cpu-min`, `:gpu-min`) do not include preloaded models. Mapping a cache directory is recommended but optional:
+  - Without mapping a cache, the image will download models on-demand on each run (no persistence).
+  - With `-v ./model-cache:/models -e MODEL_CACHE_DIR=/models`, models persist between runs.
+
+### 5. GPU Docker Fix
+- Fixed `python: not found` during build preload step in `Dockerfile.gpu` by switching to `python3`.
+
+---
+
 ## 🚀 Latest Updates - v2.0
 
 ### 1. Multiple Model Families - BIGGEST UPDATE!
@@ -568,7 +625,7 @@ Query params:
 - `force_refresh` (bool, optional): Bypass cache and fetch fresh data
 
 Response:
-```json
+```
 {
   "model_family": "opus-mt",
   "language_pairs": [["en", "de"], ["de", "en"], ...],
@@ -580,7 +637,7 @@ Response:
 Returns all available mBART50 language pairs (all-to-all for 50 languages).
 
 Response:
-```json
+```
 {
   "model_family": "mbart50",
   "language_pairs": [["en", "de"], ["de", "en"], ...],
@@ -592,7 +649,7 @@ Response:
 Returns all available M2M100 language pairs (all-to-all for 100 languages).
 
 Response:
-```json
+```
 {
   "model_family": "m2m100",
   "language_pairs": [["en", "de"], ["de", "en"], ...],
@@ -607,7 +664,7 @@ Query params:
 - `force_refresh` (bool, optional): Force refresh Opus-MT from HuggingFace
 
 Response:
-```json
+```
 {
   "models": {
     "opus-mt": {"language_pairs": [...], "pair_count": 1234},
@@ -859,3 +916,41 @@ Notes:
 
 ## License
 MIT or as specified by your repository. Replace this section with your actual license terms.
+
+
+---
+
+### Compatibility namespace (/compat)
+
+For clients that require strict EasyNMT response shapes, a dedicated compatibility namespace is available. These endpoints return exactly the EasyNMT field names without MostlyLucid-NMT extras.
+
+Examples:
+
+- GET (EasyNMT style)
+```bash
+curl "http://localhost:8000/compat/translate?target_lang=de&text=Hello%20world&source_lang=en"
+# => { "translations": ["Hallo Welt"] }
+```
+
+- POST (EasyNMT style)
+```bash
+curl -X POST http://localhost:8000/compat/translate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "text": ["Hello world"],
+    "target_lang": "de",
+    "source_lang": "en",
+    "beam_size": 5,
+    "perform_sentence_splitting": true
+  }'
+# => {
+#   "target_lang": "de",
+#   "source_lang": "en",
+#   "translated": ["Hallo Welt"],
+#   "translation_time": 0.12
+# }
+```
+
+Notes:
+- The existing endpoints under `/translate` remain as the primary, enhanced API (with optional fields like `pivot_path`, `metadata`, etc.).
+- The `/compat` endpoints are provided for legacy clients and strict EasyNMT schema requirements.
