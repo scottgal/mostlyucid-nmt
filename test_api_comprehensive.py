@@ -55,6 +55,18 @@ def print_info(message: str):
     """Print info message"""
     print(f"{Colors.OKCYAN}[INFO] {message}{Colors.ENDC}")
 
+def safe_print_translation(translation: str):
+    """Safely print translation handling Unicode"""
+    try:
+        print_success(f"Translation: '{translation}'")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        # Fallback for non-ASCII output on Windows
+        ascii_safe = translation.encode('ascii', 'ignore').decode('ascii')
+        if ascii_safe:
+            print_success(f"Translation: '{ascii_safe}' [some chars removed for display]")
+        else:
+            print_success(f"Translation received (non-ASCII, {len(translation)} chars)")
+
 def translate(
     text: str,
     source_lang: str,
@@ -126,7 +138,7 @@ def test_basic_pairs():
 
         if success:
             translation = response.get("translated", [""])[0]
-            print_success(f"Translation: '{translation}'")
+            safe_print_translation(translation)
             if expected_contains.lower() in translation.lower():
                 print_success(f"Contains expected text: '{expected_contains}'")
             else:
@@ -153,7 +165,7 @@ def test_fallback_pairs():
 
         if success:
             translation = response.get("translated", [""])[0]
-            print_success(f"Translation: '{translation}'")
+            safe_print_translation(translation)
 
             # Check if response includes metadata showing fallback
             metadata = response.get("metadata", {})
@@ -187,7 +199,7 @@ def test_explicit_model_families():
 
         if success:
             translation = response.get("translated", [""])[0]
-            print_success(f"Translation: '{translation}'")
+            safe_print_translation(translation)
 
             metadata = response.get("metadata", {})
             if metadata:
@@ -221,7 +233,7 @@ def test_pivot_translation():
 
         if success:
             translation = response.get("translated", [""])[0]
-            print_success(f"Translation: '{translation}'")
+            safe_print_translation(translation)
 
             pivot_path = response.get("pivot_path")
             if pivot_path:
@@ -242,14 +254,14 @@ def test_cache_behavior():
     print_test("First request: en -> de (cache MISS expected)")
     success1, response1 = translate("Hello", "en", "de")
     if success1:
-        print_success(f"Translation: {response1.get('translated', [''])[0]}")
+        safe_print_translation(response1.get('translated', [''])[0])
 
     time.sleep(0.5)
 
     print_test("Second request: en -> de (cache HIT expected)")
     success2, response2 = translate("World", "en", "de")
     if success2:
-        print_success(f"Translation: {response2.get('translated', [''])[0]}")
+        safe_print_translation(response2.get('translated', [''])[0])
         print_info("Model should be loaded from cache (check server logs)")
 
     time.sleep(0.5)
@@ -257,7 +269,7 @@ def test_cache_behavior():
     print_test("Different pair: fr -> en (cache MISS expected)")
     success3, response3 = translate("Bonjour", "fr", "en")
     if success3:
-        print_success(f"Translation: {response3.get('translated', [''])[0]}")
+        safe_print_translation(response3.get('translated', [''])[0])
 
     time.sleep(0.5)
 
@@ -288,7 +300,7 @@ def test_multi_model_switching():
     ]
 
     for src, tgt, family in pairs_and_families:
-        print_test(f"{src} → {tgt} using {family}")
+        print_test(f"{src} -> {tgt} using {family}")
         success, response = translate(test_text, src, tgt, model_family=family)
 
         if success:
@@ -317,7 +329,7 @@ def test_batch_translation():
         "Machine translation is amazing"
     ]
 
-    print_test(f"Batch translating {len(texts)} texts: en → de")
+    print_test(f"Batch translating {len(texts)} texts: en -> de")
 
     payload = {
         "text": texts,
@@ -341,7 +353,7 @@ def test_batch_translation():
 
             print_success(f"Received {len(translations)} translations")
             for i, (orig, trans) in enumerate(zip(texts, translations), 1):
-                print(f"  {i}. '{orig}' → '{trans}'")
+                print(f"  {i}. '{orig}' -> '{trans}'")
         else:
             print_fail(f"Batch translation failed: HTTP {response.status_code}")
     except Exception as e:
