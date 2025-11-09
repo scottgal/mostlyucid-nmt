@@ -6,12 +6,21 @@ This guide explains how to build and publish all 4 Docker image variants with pr
 
 All variants are published to the same repository: `scottgal/mostlylucid-nmt`
 
-| Tag | Dockerfile | Description | Approx Size |
-|-----|------------|-------------|------------|
-| `latest` | `Dockerfile` | CPU with preloaded models | 8-10GB |
-| `min` | `Dockerfile.min` | CPU minimal, no preloaded models | 3-4GB |
-| `gpu` | `Dockerfile.gpu` | GPU with CUDA 12.1 and preloaded models | 12-15GB |
-| `gpu-min` | `Dockerfile.gpu.min` | GPU minimal, no preloaded models | 6-8GB |
+**Multi-Platform Images** (AMD64 + ARM64):
+| Tag | Dockerfile | Platforms | Description | Approx Size |
+|-----|------------|-----------|-------------|------------|
+| `latest` / `cpu` | `Dockerfile` | AMD64, ARM64 | CPU with preloaded models | 8-10GB (AMD64), 7-9GB (ARM64) |
+| `cpu-min` | `Dockerfile.min` | AMD64, ARM64 | CPU minimal, no preloaded models | 3-4GB (AMD64), 2-3GB (ARM64) |
+
+**Single-Platform Images** (AMD64 only with CUDA):
+| Tag | Dockerfile | Platform | Description | Approx Size |
+|-----|------------|----------|-------------|------------|
+| `gpu` | `Dockerfile.gpu` | AMD64 | GPU with CUDA 12.1 and preloaded models | 12-15GB |
+| `gpu-min` | `Dockerfile.gpu.min` | AMD64 | GPU minimal, no preloaded models | 6-8GB |
+
+**Architecture Auto-Detection**: When you `docker pull scottgal/mostlylucid-nmt:latest`, Docker automatically selects:
+- **AMD64** version on x86_64 PCs
+- **ARM64** version on Raspberry Pi and Apple Silicon Macs
 
 **Why larger than EasyNMT (2-3GB)?**
 - **PyTorch 2.x vs 1.8**: Modern PyTorch is 5x larger (750MB vs 150MB for CPU, 5GB vs 1GB for GPU)
@@ -416,24 +425,45 @@ For interactive testing, use `api-tests.http` with VS Code REST Client:
 
 ## Automated Build (Recommended)
 
-### Windows (PowerShell)
+The `build-all` scripts now support **multi-platform builds** using Docker buildx. They automatically build for both AMD64 and ARM64 (Raspberry Pi, Apple Silicon) where applicable.
 
+### Local Build (Single Platform)
+
+**Windows (PowerShell)**:
 ```powershell
 .\build-all.ps1
 ```
 
-### Linux/Mac (Bash)
-
+**Linux/Mac (Bash)**:
 ```bash
 chmod +x build-all.sh
 ./build-all.sh
 ```
 
-These scripts will:
-1. Generate a version string based on current datetime (YYYYMMDD.HHMMSS)
-2. Get the current git commit hash
-3. Build all 4 variants with proper labels
-4. Tag each variant with both the named tag (latest, min, gpu, gpu-min) AND the version tag
+Builds locally for your current platform only (fast, uses `--load`).
+
+### Multi-Platform Build and Push
+
+**Windows (PowerShell)**:
+```powershell
+.\build-all.ps1 -Push
+```
+
+**Linux/Mac (Bash)**:
+```bash
+./build-all.sh --push
+```
+
+Builds for **both AMD64 and ARM64** (CPU variants only) and pushes to Docker Hub with manifest lists. GPU variants remain AMD64-only (CUDA requirement).
+
+**What the scripts do**:
+1. Generate version string: `YYYYMMDD.HHMMSS`
+2. Get git commit hash for VCS_REF label
+3. Set up Docker buildx for multi-platform builds
+4. Build CPU variants for AMD64 + ARM64 (multi-platform manifest)
+5. Build GPU variants for AMD64 only (CUDA)
+6. Tag with both named tags (`:latest`, `:cpu`, `:gpu`, etc.) and version tags (`:cpu-20250108.143022`)
+7. Push to Docker Hub (when `--push` flag used)
 
 ## Manual Build
 
@@ -610,24 +640,60 @@ See the workflow file for complete implementation details.
 
 ## Multi-Architecture Builds
 
-To build for multiple architectures (amd64, arm64):
+**TL;DR**: Use `./build-all.sh --push` or `.\build-all.ps1 -Push` to build and push multi-platform images automatically.
+
+The build scripts handle multi-architecture builds using Docker buildx:
+
+### Automatic (Recommended)
+
+**Linux/Mac**:
+```bash
+./build-all.sh --push
+```
+
+**Windows**:
+```powershell
+.\build-all.ps1 -Push
+```
+
+This creates multi-platform manifest lists for CPU variants that work on both AMD64 (x86_64) and ARM64 (Raspberry Pi, Apple Silicon).
+
+### Manual Multi-Platform Build
+
+If you need to build manually:
 
 ```bash
-# Create and use buildx builder
-docker buildx create --use
+# Create and use buildx builder (one-time setup)
+docker buildx create --name multiarch-builder --use
+docker buildx inspect --bootstrap
 
-# Build for multiple platforms
+# Build CPU variants for multiple platforms
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --build-arg VERSION="${VERSION}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg VCS_REF="${VCS_REF}" \
-  -t scottgal/mostlylucid-nmt:cpu \
   -t scottgal/mostlylucid-nmt:latest \
+  -t scottgal/mostlylucid-nmt:cpu \
   -t scottgal/mostlylucid-nmt:cpu-${VERSION} \
+  -f Dockerfile \
+  --push \
+  .
+
+# Build GPU variant (AMD64 only - CUDA requirement)
+docker buildx build \
+  --platform linux/amd64 \
+  --build-arg VERSION="${VERSION}" \
+  --build-arg BUILD_DATE="${BUILD_DATE}" \
+  --build-arg VCS_REF="${VCS_REF}" \
+  -t scottgal/mostlylucid-nmt:gpu \
+  -t scottgal/mostlylucid-nmt:gpu-${VERSION} \
+  -f Dockerfile.gpu \
   --push \
   .
 ```
+
+**Note**: Multi-platform builds with buildx require `--push` to a registry. You cannot use `--load` with multiple platforms.
 
 ## Troubleshooting
 

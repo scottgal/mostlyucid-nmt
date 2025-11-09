@@ -2,11 +2,10 @@
 REM Build script for ARM64/Raspberry Pi (Windows)
 REM Uses buildx for cross-compilation
 
-setlocal enabledelayedexpansion
+setlocal
 
-REM Generate version timestamp
-for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set datetime=%%I
-set VERSION=!datetime:~0,4!!datetime:~4,2!!datetime:~6,2!.!datetime:~8,2!!datetime:~10,2!!datetime:~12,2!
+REM Generate version timestamp using PowerShell
+for /f "delims=" %%i in ('powershell -Command "(Get-Date).ToUniversalTime().ToString('yyyyMMdd.HHmmss')"') do set VERSION=%%i
 
 set IMAGE_NAME=mostlylucid-nmt
 set DOCKER_HUB_REPO=scottgal/mostlylucid-nmt

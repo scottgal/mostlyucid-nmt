@@ -1,6 +1,8 @@
 services:
   translation:
-    image: mostlylucid-nmt:arm64
+    # Use :latest for multi-platform (auto-detects ARM64)
+    # Or use scottgal/mostlylucid-nmt:latest to pull from Docker Hub
+    image: scottgal/mostlylucid-nmt:latest
     container_name: mostlylucid-nmt-pi
     restart: unless-stopped
     ports:
@@ -60,7 +62,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3G  # Leave 1GB for system
+          memory: 6G  # Pig 7G, adjust as needed Leave 1GB for system
         reservations:
           memory: 512M
 

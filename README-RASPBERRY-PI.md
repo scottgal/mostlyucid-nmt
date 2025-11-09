@@ -40,8 +40,8 @@ sudo usermod -aG docker $USER
 ### 2. Pull Pre-built Image
 
 ```bash
-# Pull ARM64 image from Docker Hub
-docker pull scottgal/mostlylucid-nmt:arm64
+# Pull multi-platform image - Docker automatically selects ARM64 on Raspberry Pi
+docker pull scottgal/mostlylucid-nmt:latest
 ```
 
 ### 3. Run with Docker Compose (Recommended)
@@ -64,6 +64,7 @@ docker-compose -f docker-compose-arm64.yml logs -f
 ### 4. Or Run Directly
 
 ```bash
+# Docker automatically selects the ARM64 version on Raspberry Pi
 docker run -d \
   --name translation \
   --restart unless-stopped \
@@ -72,7 +73,7 @@ docker run -d \
   -e MODEL_CACHE_DIR=/models \
   -e MAX_CACHED_MODELS=2 \
   -e EASYNMT_BATCH_SIZE=4 \
-  scottgal/mostlylucid-nmt:arm64
+  scottgal/mostlylucid-nmt:latest
 ```
 
 ## Building Locally on Raspberry Pi
@@ -84,7 +85,7 @@ If you want to build the image yourself:
 git clone https://github.com/scottgal/mostlylucid-nmt.git
 cd mostlylucid-nmt
 
-# Build ARM64 image
+# Build ARM64 image (creates local tags)
 chmod +x build-arm64.sh
 ./build-arm64.sh
 
@@ -94,8 +95,13 @@ docker run -d \
   -p 8000:8000 \
   -v $(pwd)/model-cache:/models \
   -e MODEL_CACHE_DIR=/models \
-  mostlylucid-nmt:arm64
+  mostlylucid-nmt:pi
 ```
+
+**Note**: The build script creates multiple tags:
+- `mostlylucid-nmt:pi` - Recommended for Raspberry Pi
+- `mostlylucid-nmt:arm64` - Also works (same image)
+- `mostlylucid-nmt:pi-YYYYMMDD.HHMMSS` - Versioned tag
 
 ## Performance Expectations
 

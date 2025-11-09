@@ -1,5 +1,9 @@
-# Build all Docker image variants with proper versioning
+# Build all Docker image variants with proper versioning and multi-platform support
 # PowerShell script for Windows
+#
+# Usage:
+#   .\build-all.ps1           # Build locally (single platform)
+#   .\build-all.ps1 -Push     # Build and push multi-platform images to Docker Hub
 #
 # RAPID LOCAL TESTING:
 #   For fastest iteration, build ONLY the minimal variants (skip model downloads):
@@ -9,106 +13,242 @@
 #
 #   Just GPU minimal (30 seconds):
 #     docker build -f Dockerfile.gpu.min -t dev:gpu .
-#
-#   Build only minimal variants from this script:
-#     Comment out the "full" builds below (CPU full and GPU full sections)
-#
-# FULL BUILD (production):
-#   Run this script as-is to build all 4 variants (~20-30 minutes total)
-#
+
+param(
+    [switch]$Push = $false
+)
 
 # Generate version string (datetime to the second)
-$VERSION = (Get-Date).ToUniversalTime().ToString("yyyyMMdd.HHmmss")
-$BUILD_DATE = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+$now = (Get-Date).ToUniversalTime()
+$VERSION = $now.ToString("yyyyMMdd.HHmmss")
+$BUILD_DATE = $now.ToString("yyyy-MM-ddTHH:mm:ssZ")
 try {
     $VCS_REF = (git rev-parse --short HEAD 2>$null)
+    if (-not $VCS_REF) { $VCS_REF = "unknown" }
 } catch {
     $VCS_REF = "unknown"
 }
 
-Write-Host "Building all variants with version: $VERSION" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "Multi-platform build for mostlylucid-nmt" -ForegroundColor Cyan
+Write-Host "Version: $VERSION" -ForegroundColor Cyan
 Write-Host "VCS ref: $VCS_REF" -ForegroundColor Cyan
 Write-Host "Build date: $BUILD_DATE" -ForegroundColor Cyan
+Write-Host "Push to Docker Hub: $Push" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Docker repository - ONE repository with multiple tags
 $REPO = "scottgal/mostlylucid-nmt"
 
-# Build CPU full image (cpu and latest tags)
-Write-Host "Building ${REPO}:cpu (CPU full)..." -ForegroundColor Yellow
-docker build `
-  --build-arg VERSION="$VERSION" `
-  --build-arg BUILD_DATE="$BUILD_DATE" `
-  --build-arg VCS_REF="$VCS_REF" `
-  -t "${REPO}:cpu" `
-  -t "${REPO}:latest" `
-  -t "${REPO}:cpu-${VERSION}" `
-  -f Dockerfile `
-  .
-
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-# Build CPU minimal image (cpu-min tag)
+# Ensure buildx is available and create/use builder
+Write-Host "Setting up Docker buildx..." -ForegroundColor Yellow
+docker buildx create --name multiarch-builder --use 2>$null
+if ($LASTEXITCODE -ne 0) {
+    docker buildx use multiarch-builder
+}
+docker buildx inspect --bootstrap
 Write-Host ""
-Write-Host "Building ${REPO}:cpu-min (CPU minimal)..." -ForegroundColor Yellow
-docker build `
-  --build-arg VERSION="$VERSION" `
-  --build-arg BUILD_DATE="$BUILD_DATE" `
-  --build-arg VCS_REF="$VCS_REF" `
-  -t "${REPO}:cpu-min" `
-  -t "${REPO}:cpu-min-${VERSION}" `
-  -f Dockerfile.min `
-  .
 
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Build CPU full image (multi-platform: AMD64 + ARM64)
+Write-Host "==========================================" -ForegroundColor Yellow
+Write-Host "Building CPU full (multi-platform)" -ForegroundColor Yellow
+Write-Host "Platforms: linux/amd64, linux/arm64" -ForegroundColor Yellow
+Write-Host "==========================================" -ForegroundColor Yellow
 
-# Build GPU full image (gpu tag)
-Write-Host ""
-Write-Host "Building ${REPO}:gpu (GPU full)..." -ForegroundColor Yellow
-docker build `
-  --build-arg VERSION="$VERSION" `
-  --build-arg BUILD_DATE="$BUILD_DATE" `
-  --build-arg VCS_REF="$VCS_REF" `
-  -t "${REPO}:gpu" `
-  -t "${REPO}:gpu-${VERSION}" `
-  -f Dockerfile.gpu `
-  .
+if ($Push) {
+    docker buildx build `
+      --platform linux/amd64,linux/arm64 `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:cpu" `
+      -t "${REPO}:latest" `
+      -t "${REPO}:cpu-${VERSION}" `
+      -f Dockerfile `
+      --push `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Pushed ${REPO}:cpu (AMD64 + ARM64)" -ForegroundColor Green
+    Write-Host "Pushed ${REPO}:latest (AMD64 + ARM64)" -ForegroundColor Green
+    Write-Host "Pushed ${REPO}:cpu-${VERSION} (AMD64 + ARM64)" -ForegroundColor Green
+} else {
+    docker buildx build `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:cpu" `
+      -t "${REPO}:latest" `
+      -t "${REPO}:cpu-${VERSION}" `
+      -f Dockerfile `
+      --load `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Built ${REPO}:cpu (local platform only)" -ForegroundColor Green
+    Write-Host "Built ${REPO}:latest (local platform only)" -ForegroundColor Green
+    Write-Host "Built ${REPO}:cpu-${VERSION} (local platform only)" -ForegroundColor Green
+}
 
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Build CPU minimal image (multi-platform: AMD64 + ARM64)
+Write-Host ""
+Write-Host "==========================================" -ForegroundColor Yellow
+Write-Host "Building CPU minimal (multi-platform)" -ForegroundColor Yellow
+Write-Host "Platforms: linux/amd64, linux/arm64" -ForegroundColor Yellow
+Write-Host "==========================================" -ForegroundColor Yellow
 
-# Build GPU minimal image (gpu-min tag)
-Write-Host ""
-Write-Host "Building ${REPO}:gpu-min (GPU minimal)..." -ForegroundColor Yellow
-docker build `
-  --build-arg VERSION="$VERSION" `
-  --build-arg BUILD_DATE="$BUILD_DATE" `
-  --build-arg VCS_REF="$VCS_REF" `
-  -t "${REPO}:gpu-min" `
-  -t "${REPO}:gpu-min-${VERSION}" `
-  -f Dockerfile.gpu.min `
-  .
+if ($Push) {
+    docker buildx build `
+      --platform linux/amd64,linux/arm64 `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:cpu-min" `
+      -t "${REPO}:cpu-min-${VERSION}" `
+      -f Dockerfile.min `
+      --push `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Pushed ${REPO}:cpu-min (AMD64 + ARM64)" -ForegroundColor Green
+    Write-Host "Pushed ${REPO}:cpu-min-${VERSION} (AMD64 + ARM64)" -ForegroundColor Green
+} else {
+    docker buildx build `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:cpu-min" `
+      -t "${REPO}:cpu-min-${VERSION}" `
+      -f Dockerfile.min `
+      --load `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Built ${REPO}:cpu-min (local platform only)" -ForegroundColor Green
+    Write-Host "Built ${REPO}:cpu-min-${VERSION} (local platform only)" -ForegroundColor Green
+}
 
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Build GPU full image (AMD64 only with CUDA)
+Write-Host ""
+Write-Host "==========================================" -ForegroundColor Yellow
+Write-Host "Building GPU full (AMD64 only)" -ForegroundColor Yellow
+Write-Host "Platform: linux/amd64 with CUDA" -ForegroundColor Yellow
+Write-Host "==========================================" -ForegroundColor Yellow
+
+if ($Push) {
+    docker buildx build `
+      --platform linux/amd64 `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:gpu" `
+      -t "${REPO}:gpu-${VERSION}" `
+      -f Dockerfile.gpu `
+      --push `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Pushed ${REPO}:gpu (AMD64 with CUDA)" -ForegroundColor Green
+    Write-Host "Pushed ${REPO}:gpu-${VERSION} (AMD64 with CUDA)" -ForegroundColor Green
+} else {
+    docker buildx build `
+      --platform linux/amd64 `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:gpu" `
+      -t "${REPO}:gpu-${VERSION}" `
+      -f Dockerfile.gpu `
+      --load `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Built ${REPO}:gpu (AMD64 with CUDA)" -ForegroundColor Green
+    Write-Host "Built ${REPO}:gpu-${VERSION} (AMD64 with CUDA)" -ForegroundColor Green
+}
+
+# Build GPU minimal image (AMD64 only with CUDA)
+Write-Host ""
+Write-Host "==========================================" -ForegroundColor Yellow
+Write-Host "Building GPU minimal (AMD64 only)" -ForegroundColor Yellow
+Write-Host "Platform: linux/amd64 with CUDA" -ForegroundColor Yellow
+Write-Host "==========================================" -ForegroundColor Yellow
+
+if ($Push) {
+    docker buildx build `
+      --platform linux/amd64 `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:gpu-min" `
+      -t "${REPO}:gpu-min-${VERSION}" `
+      -f Dockerfile.gpu.min `
+      --push `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Pushed ${REPO}:gpu-min (AMD64 with CUDA)" -ForegroundColor Green
+    Write-Host "Pushed ${REPO}:gpu-min-${VERSION} (AMD64 with CUDA)" -ForegroundColor Green
+} else {
+    docker buildx build `
+      --platform linux/amd64 `
+      --build-arg VERSION="$VERSION" `
+      --build-arg BUILD_DATE="$BUILD_DATE" `
+      --build-arg VCS_REF="$VCS_REF" `
+      -t "${REPO}:gpu-min" `
+      -t "${REPO}:gpu-min-${VERSION}" `
+      -f Dockerfile.gpu.min `
+      --load `
+      .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "Built ${REPO}:gpu-min (AMD64 with CUDA)" -ForegroundColor Green
+    Write-Host "Built ${REPO}:gpu-min-${VERSION} (AMD64 with CUDA)" -ForegroundColor Green
+}
 
 Write-Host ""
-Write-Host "✓ All builds completed successfully!" -ForegroundColor Green
+Write-Host "==========================================" -ForegroundColor Green
+Write-Host "All builds completed successfully!" -ForegroundColor Green
+Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Images built (all in ONE repository with different tags):"
-Write-Host "  ${REPO}:cpu (also tagged as :latest and :cpu-${VERSION})"
-Write-Host "  ${REPO}:cpu-min (also tagged as :cpu-min-${VERSION})"
-Write-Host "  ${REPO}:gpu (also tagged as :gpu-${VERSION})"
-Write-Host "  ${REPO}:gpu-min (also tagged as :gpu-min-${VERSION})"
+
+if ($Push) {
+    Write-Host "Images pushed to Docker Hub:" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "CPU (multi-platform - auto-detects AMD64 or ARM64):"
+    Write-Host "  ${REPO}:latest"
+    Write-Host "  ${REPO}:cpu"
+    Write-Host "  ${REPO}:cpu-${VERSION}"
+    Write-Host "  ${REPO}:cpu-min"
+    Write-Host "  ${REPO}:cpu-min-${VERSION}"
+    Write-Host ""
+    Write-Host "GPU (AMD64 only with CUDA):"
+    Write-Host "  ${REPO}:gpu"
+    Write-Host "  ${REPO}:gpu-${VERSION}"
+    Write-Host "  ${REPO}:gpu-min"
+    Write-Host "  ${REPO}:gpu-min-${VERSION}"
+    Write-Host ""
+    Write-Host "Users can now pull and Docker will auto-select the right architecture:" -ForegroundColor Cyan
+    Write-Host "  docker pull ${REPO}:latest    # Gets AMD64 on PC, ARM64 on Raspberry Pi"
+    Write-Host "  docker pull ${REPO}:gpu        # Gets AMD64 with CUDA"
+} else {
+    Write-Host "Images built locally (not pushed to Docker Hub):" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "CPU images (local platform only):"
+    Write-Host "  ${REPO}:latest"
+    Write-Host "  ${REPO}:cpu"
+    Write-Host "  ${REPO}:cpu-${VERSION}"
+    Write-Host "  ${REPO}:cpu-min"
+    Write-Host "  ${REPO}:cpu-min-${VERSION}"
+    Write-Host ""
+    Write-Host "GPU images (local platform only):"
+    Write-Host "  ${REPO}:gpu"
+    Write-Host "  ${REPO}:gpu-${VERSION}"
+    Write-Host "  ${REPO}:gpu-min"
+    Write-Host "  ${REPO}:gpu-min-${VERSION}"
+    Write-Host ""
+    Write-Host "To build AND push multi-platform images to Docker Hub:" -ForegroundColor Cyan
+    Write-Host "  .\build-all.ps1 -Push"
+}
+
 Write-Host ""
-Write-Host "To push to Docker Hub:" -ForegroundColor Cyan
-Write-Host "  docker push ${REPO}:cpu"
-Write-Host "  docker push ${REPO}:latest"
-Write-Host "  docker push ${REPO}:cpu-${VERSION}"
-Write-Host "  docker push ${REPO}:cpu-min"
-Write-Host "  docker push ${REPO}:cpu-min-${VERSION}"
-Write-Host "  docker push ${REPO}:gpu"
-Write-Host "  docker push ${REPO}:gpu-${VERSION}"
-Write-Host "  docker push ${REPO}:gpu-min"
-Write-Host "  docker push ${REPO}:gpu-min-${VERSION}"
+Write-Host "Usage examples:" -ForegroundColor Cyan
+Write-Host "  # CPU on any platform (auto-detects architecture)"
+Write-Host "  docker run -p 8000:8000 ${REPO}:latest"
 Write-Host ""
-Write-Host "Or push all tags at once:" -ForegroundColor Cyan
-Write-Host "  docker push ${REPO} --all-tags"
+Write-Host "  # GPU on x86_64 with NVIDIA GPU"
+Write-Host "  docker run --gpus all -p 8000:8000 ${REPO}:gpu"
+Write-Host ""

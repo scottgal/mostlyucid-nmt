@@ -31,7 +31,8 @@
       "Bash(powershell -Command:*)",
       "Bash(dir /B /O-D E:sourcemostlylucid-nmt*.log 2)",
       "Bash(nul)",
-      "Bash(k6 version:*)"
+      "Bash(k6 version:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
