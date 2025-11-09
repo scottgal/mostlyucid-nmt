@@ -193,6 +193,8 @@ async def translate_post(
             translation_time=0.0
         )
 
+    # Track if source language was auto-detected for detected_langs field
+    was_auto_detected = not body.source_lang
     src = body.source_lang or language_detector.detect_language(
         next((t for t in base_texts if t and (not config.INPUT_SANITIZE or not is_noise(t))), "")
     )
@@ -255,9 +257,13 @@ async def translate_post(
     if include_metadata and metadata_dict:
         metadata_obj = TranslationMetadata(**metadata_dict)
 
+    # Include detected_langs for EasyNMT compatibility when source was auto-detected
+    detected_langs = [src] if was_auto_detected else None
+
     response = TranslatePostResponse(
         target_lang=body.target_lang,
         source_lang=src,
+        detected_langs=detected_langs,
         translated=texts,
         translation_time=float(duration_sec),
         pivot_path=pivot_path,

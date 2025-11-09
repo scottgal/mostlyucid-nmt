@@ -53,6 +53,7 @@ class TranslatePostResponse(BaseModel):
 
     target_lang: str = Field(..., description="Target language code")
     source_lang: str = Field(..., description="Detected or provided source language code")
+    detected_langs: Optional[List[str]] = Field(default=None, description="Detected source languages (present when source_lang was auto-detected)")
     translated: List[str] = Field(..., description="Translated texts")
     translation_time: float = Field(..., description="Translation duration in seconds")
     pivot_path: Union[str, None] = Field(default=None, description="Pivot translation path if used (e.g., 'ja->en->de')")
