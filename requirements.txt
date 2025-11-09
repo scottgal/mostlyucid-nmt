@@ -9,7 +9,9 @@ torch>=2.0.0
 langdetect>=1.0.9
 sentencepiece>=0.1.99
 sacremoses>=0.0.53
+protobuf>=3.20.0
 httpx>=0.26.0
+tqdm>=4.66.0
 
 # Development dependencies
 pytest>=7.4.0

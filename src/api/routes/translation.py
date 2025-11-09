@@ -209,12 +209,12 @@ async def translate_post(
         async with await acquire_translate_slot():
             if config.TRANSLATE_TIMEOUT_SEC > 0:
                 texts, pivot_used, metadata_dict = await asyncio.wait_for(
-                    translation_service.translate_async(base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata),
+                    translation_service.translate_async(base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata, body.model_family),
                     timeout=config.TRANSLATE_TIMEOUT_SEC
                 )
             else:
                 texts, pivot_used, metadata_dict = await translation_service.translate_async(
-                    base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata
+                    base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata, body.model_family
                 )
 
     except QueueOverflowError as e:

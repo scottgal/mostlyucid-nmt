@@ -3,12 +3,17 @@
 from typing import Any, Optional
 from transformers import pipeline
 import os
+import sys
 
 from src.config import config
 from src.core.cache import LRUPipelineCache
 from src.core.device import device_manager
 from src.core.logging import logger
+from src.core.download_progress import setup_hf_progress
 from src.exceptions import ModelLoadError
+
+# Enable beautiful download progress bars
+setup_hf_progress()
 
 
 class ModelManager:
@@ -73,12 +78,14 @@ class ModelManager:
                 ValueError(f"Unsupported MODEL_FAMILY='{family}'. Supported: opus-mt, mbart50, m2m100")
             )
 
-    def get_pipeline(self, src: str, tgt: str) -> Any:
+    def get_pipeline(self, src: str, tgt: str, preferred_family: Optional[str] = None) -> Any:
         """Get or load translation pipeline for language pair with automatic fallback.
 
         Args:
             src: Source language code
             tgt: Target language code
+            preferred_family: Preferred model family (opus-mt, mbart50, m2m100).
+                            Uses config.MODEL_FAMILY if None.
 
         Returns:
             Transformers pipeline for translation
@@ -86,7 +93,9 @@ class ModelManager:
         Raises:
             ModelLoadError: If model loading fails for all families
         """
-        key = f"{src}->{tgt}"
+        # Use preferred family in cache key if specified
+        family_key = preferred_family or config.MODEL_FAMILY
+        key = f"{src}->{tgt}:{family_key}"
         cached = self.cache.get(key)
 
         if cached is not None:
@@ -97,25 +106,38 @@ class ModelManager:
         # Determine which model family to use
         families_to_try = []
 
-        if config.AUTO_MODEL_FALLBACK:
+        if preferred_family:
+            # User requested specific family - try it first
+            if self._is_pair_supported(src, tgt, preferred_family):
+                families_to_try.append(preferred_family)
+
+            # If preferred family doesn't support the pair, fall back if enabled
+            if config.AUTO_MODEL_FALLBACK and not families_to_try:
+                fallback_families = [f.strip() for f in config.MODEL_FALLBACK_ORDER.split(",") if f.strip()]
+                for family in fallback_families:
+                    if family != preferred_family and self._is_pair_supported(src, tgt, family):
+                        families_to_try.append(family)
+        elif config.AUTO_MODEL_FALLBACK:
             # Parse fallback order
             fallback_families = [f.strip() for f in config.MODEL_FALLBACK_ORDER.split(",") if f.strip()]
             # Filter to only supported families for this pair
             for family in fallback_families:
                 if self._is_pair_supported(src, tgt, family):
                     families_to_try.append(family)
-
-            if not families_to_try:
-                # No family supports this pair
-                raise ModelLoadError(
-                    f"{src}->{tgt}",
-                    ValueError(f"Language pair {src}->{tgt} not supported by any model family")
-                )
         else:
             # No fallback, use configured family only
             families_to_try = [config.MODEL_FAMILY]
 
+        if not families_to_try:
+            # No family supports this pair
+            logger.error(f"No families support {src}->{tgt}. Checked: opus-mt={self._is_pair_supported(src, tgt, 'opus-mt')}, mbart50={self._is_pair_supported(src, tgt, 'mbart50')}, m2m100={self._is_pair_supported(src, tgt, 'm2m100')}")
+            raise ModelLoadError(
+                f"{src}->{tgt}",
+                ValueError(f"Language pair {src}->{tgt} not supported by any model family")
+            )
+
         # Try each family in order
+        logger.info(f"Trying families for {src}->{tgt}: {families_to_try}")
         last_error = None
         for family in families_to_try:
             try:
@@ -124,14 +146,29 @@ class ModelManager:
                 if family != config.MODEL_FAMILY:
                     logger.info(f"Using fallback model family '{family}' for {src}->{tgt} (primary '{config.MODEL_FAMILY}' not available)")
 
+                # Show nice loading message
+                logger.info(f"Loading translation model: {model_name} ({src}->{tgt})")
+
+                # If on a TTY, show a nice header
+                if sys.stdout.isatty() or os.getenv("FORCE_PROGRESS_BAR", "0") == "1":
+                    print(f"\n{'='*80}")
+                    print(f"  Loading Model: {model_name}")
+                    print(f"  Direction: {src} → {tgt}")
+                    print(f"  Family: {family}")
+                    print(f"{'='*80}\n")
+
                 if config.REQUEST_LOG:
-                    logger.info(f"Pipeline cache miss: {key}, loading model {model_name} (family: {family})")
+                    logger.debug(f"Pipeline cache miss: {key}, loading model {model_name} (family: {family})")
 
                 # Build pipeline kwargs
+                # Note: cache_dir is NOT valid for pipeline(), only for model loading
+                # Remove cache_dir from pipeline kwargs (transformers uses default HF cache)
+                filtered_kwargs = {k: v for k, v in self.pipeline_kwargs.items() if k != "cache_dir"}
+
                 pipeline_kwargs = {
                     "model": model_name,
                     "device": device_manager.device_index,
-                    **self.pipeline_kwargs
+                    **filtered_kwargs
                 }
 
                 # If running a prepacked image with preloaded models, prefer the on-disk snapshot
@@ -157,6 +194,15 @@ class ModelManager:
                 pl = pipeline("translation", **pipeline_kwargs)
 
                 self.cache.put(key, pl)
+
+                # Show success message
+                if sys.stdout.isatty() or os.getenv("FORCE_PROGRESS_BAR", "0") == "1":
+                    print(f"\n{'='*80}")
+                    print(f"  ✓ Model loaded successfully!")
+                    print(f"  Model: {model_name}")
+                    print(f"  Ready for translation: {src} → {tgt}")
+                    print(f"{'='*80}\n")
+
                 logger.info(f"Successfully loaded model: {model_name} ({src}->{tgt}) using family '{family}'")
                 return pl
 

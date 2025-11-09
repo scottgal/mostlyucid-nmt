@@ -1,7 +1,7 @@
 """Pydantic models for request/response validation."""
 
 from typing import Union, List, Dict, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 
 
 class TranslatePostBody(BaseModel):
@@ -12,6 +12,7 @@ class TranslatePostBody(BaseModel):
     source_lang: str = Field(default="", description="Source language code (empty for auto-detect)")
     beam_size: int = Field(default=5, ge=1, description="Beam size for translation")
     perform_sentence_splitting: bool = Field(default=True, description="Whether to split sentences")
+    model_family: Optional[str] = Field(default=None, description="Model family to use (opus-mt, mbart50, m2m100). Uses server default if not specified.")
 
     @validator("text")
     def validate_text(cls, v):
@@ -46,6 +47,8 @@ class TranslationMetadata(BaseModel):
 
 class TranslatePostResponse(BaseModel):
     """Response for POST /translate endpoint."""
+
+    model_config = ConfigDict(exclude_none=True)  # Exclude null/None fields from JSON
 
     target_lang: str = Field(..., description="Target language code")
     source_lang: str = Field(..., description="Detected or provided source language code")

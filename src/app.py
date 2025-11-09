@@ -53,22 +53,31 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up translation service...")
 
-    # Initialize executors
-    _backend_executor = ThreadPoolExecutor(max_workers=max(1, config.MAX_WORKERS_BACKEND))
-    _frontend_executor = ThreadPoolExecutor(max_workers=max(1, config.MAX_WORKERS_FRONTEND))
+    try:
+        # Initialize executors
+        logger.info("Initializing executors...")
+        _backend_executor = ThreadPoolExecutor(max_workers=max(1, config.MAX_WORKERS_BACKEND))
+        _frontend_executor = ThreadPoolExecutor(max_workers=max(1, config.MAX_WORKERS_FRONTEND))
+        logger.info(f"Executors initialized (backend={config.MAX_WORKERS_BACKEND}, frontend={config.MAX_WORKERS_FRONTEND})")
 
-    # Initialize translation service
-    _translation_service = TranslationService(_backend_executor)
+        # Initialize translation service
+        logger.info("Initializing translation service...")
+        _translation_service = TranslationService(_backend_executor)
+        logger.info(f"Translation service initialized: {_translation_service}")
 
-    # Preload models if requested
-    if config.PRELOAD_MODELS:
-        logger.info(f"Preloading models: {config.PRELOAD_MODELS}")
-        model_manager.preload_models(config.PRELOAD_MODELS)
+        # Preload models if requested
+        if config.PRELOAD_MODELS:
+            logger.info(f"Preloading models: {config.PRELOAD_MODELS}")
+            model_manager.preload_models(config.PRELOAD_MODELS)
 
-    # Start maintenance task
-    _maintenance_task_handle = asyncio.create_task(_maintenance_task())
+        # Start maintenance task
+        _maintenance_task_handle = asyncio.create_task(_maintenance_task())
 
-    logger.info("Translation service ready")
+        logger.info("Translation service ready")
+
+    except Exception as e:
+        logger.error(f"Failed to initialize translation service: {e}", exc_info=True)
+        raise
 
     yield
 

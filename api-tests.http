@@ -173,10 +173,10 @@ POST {{baseUrl}}/discover/clear-cache
 ###############################################################################
 
 ### EasyNMT Translate (GET) - Legacy format
-GET {{baseUrl}}/easynmt/translate?text=Hello&target_lang=de&source_lang=en
+GET {{baseUrl}}/compat/translate?text=Hello&target_lang=de&source_lang=en
 
 ### EasyNMT Translate (POST) - Legacy format
-POST {{baseUrl}}/easynmt/translate
+POST {{baseUrl}}/compat/translate
 Content-Type: application/json
 
 {
@@ -186,7 +186,7 @@ Content-Type: application/json
 }
 
 ### EasyNMT Language Detection
-POST {{baseUrl}}/easynmt/language_detection
+POST {{baseUrl}}/compat/language_detection
 Content-Type: application/json
 
 {
@@ -194,10 +194,10 @@ Content-Type: application/json
 }
 
 ### EasyNMT Available Languages
-GET {{baseUrl}}/easynmt/available_languages
+GET {{baseUrl}}/compat/available_languages
 
 ### EasyNMT Language Pairs
-GET {{baseUrl}}/easynmt/lang_pairs
+GET {{baseUrl}}/compat/lang_pairs
 
 ###############################################################################
 # ERROR CASES & EDGE CASES
@@ -237,7 +237,7 @@ POST {{baseUrl}}/translate
 Content-Type: application/json
 
 {
-  "text": ["This is a very long sentence that goes on and on and on. " * 50],
+  "text": ["This is a very long sentence that goes on and on and on. "],
   "target_lang": "de",
   "source_lang": "en"
 }

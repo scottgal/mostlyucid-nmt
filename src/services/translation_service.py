@@ -67,7 +67,8 @@ class TranslationService:
         tgt: str,
         eff_beam: int,
         perform_sentence_splitting: bool,
-        translator_direct: Optional[any] = None
+        translator_direct: Optional[any] = None,
+        preferred_family: Optional[str] = None
     ) -> Tuple[str, bool]:
         """Translate a single text item.
 
@@ -82,7 +83,10 @@ class TranslationService:
         Returns:
             Tuple of (translated text or placeholder if failed, pivot_used flag)
         """
+        logger.debug(f"[Translate] Input text (len={len(txt)}): {txt[:100]}...")
+
         if config.INPUT_SANITIZE and is_noise(txt):
+            logger.info(f"[Translate] Text detected as noise, skipping translation")
             return (config.SANITIZE_PLACEHOLDER, False)
 
         gen_max_len = 512
@@ -90,26 +94,35 @@ class TranslationService:
             gen_max_len = min(gen_max_len, max(1, config.EASYNMT_MAX_TEXT_LEN_INT))
 
         try:
-            translator = translator_direct or model_manager.get_pipeline(src, tgt)
+            translator = translator_direct or model_manager.get_pipeline(src, tgt, preferred_family)
+            logger.debug(f"[Translate] Got pipeline for {src}->{tgt} (family: {preferred_family or 'default'})")
 
             if perform_sentence_splitting:
                 sents = split_sentences(txt)
+                logger.debug(f"[Translate] Split into {len(sents)} sentences")
                 chunks = chunk_sentences(sents, config.MAX_CHUNK_CHARS)
+                logger.debug(f"[Translate] Created {len(chunks)} chunks")
                 out = self._translate_with_translator(translator, chunks, eff_beam)
+                logger.debug(f"[Translate] Translation output: {out[:2] if len(out) > 2 else out}")
                 combined = config.JOIN_SENTENCES_WITH.join(out)
                 combined = remove_repeating_new_symbols(txt, combined)
+                logger.info(f"[Translate] Success with sentence splitting: {combined[:50]}...")
                 return (combined, False)
             else:
+                logger.debug(f"[Translate] Translating without sentence splitting")
                 res = translator([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
+                logger.debug(f"[Translate] Raw result: {res}")
                 base = res[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
+                logger.debug(f"[Translate] Extracted translation_text: '{base}'")
                 base = remove_repeating_new_symbols(txt, base)
+                logger.info(f"[Translate] Success: '{base}'")
                 return (base, False)
 
         except Exception as direct_err:
             # Attempt pivot fallback if enabled
+            logger.error(f"[Translate] Direct translation failed: {type(direct_err).__name__}: {direct_err}")
             if not config.PIVOT_FALLBACK or config.PIVOT_LANG in (src, tgt):
-                if config.REQUEST_LOG:
-                    logger.warning(f"Direct translate failed (no pivot): {direct_err}")
+                logger.warning(f"[Translate] No pivot available, returning placeholder")
                 return (config.SANITIZE_PLACEHOLDER, False)
 
             try:
@@ -149,7 +162,8 @@ class TranslationService:
         src: str,
         tgt: str,
         eff_beam: int,
-        perform_sentence_splitting: bool
+        perform_sentence_splitting: bool,
+        preferred_family: Optional[str] = None
     ) -> Tuple[List[str], bool]:
         """Translate list of texts while preserving alignment.
 
@@ -159,6 +173,7 @@ class TranslationService:
             tgt: Target language
             eff_beam: Beam size
             perform_sentence_splitting: Whether to split sentences
+            preferred_family: Preferred model family (opus-mt, mbart50, m2m100)
 
         Returns:
             Tuple of (list of translations (same length as input), pivot_used flag)
@@ -169,7 +184,7 @@ class TranslationService:
         # Try to load direct translator once
         translator_direct = None
         try:
-            translator_direct = model_manager.get_pipeline(src, tgt)
+            translator_direct = model_manager.get_pipeline(src, tgt, preferred_family)
         except Exception as e:
             # We will use pivot per-item if available
             if config.REQUEST_LOG:
@@ -181,7 +196,8 @@ class TranslationService:
                 txt = t if isinstance(t, str) else ""
                 translated, item_pivot_used = self._translate_text_single(
                     txt, src, tgt, eff_beam, perform_sentence_splitting,
-                    translator_direct=translator_direct
+                    translator_direct=translator_direct,
+                    preferred_family=preferred_family
                 )
                 if item_pivot_used:
                     pivot_used = True
@@ -258,7 +274,8 @@ class TranslationService:
         tgt: str,
         beam_size: int,
         perform_sentence_splitting: bool,
-        include_metadata: bool = False
+        include_metadata: bool = False,
+        preferred_family: Optional[str] = None
     ) -> Tuple[List[str], bool, Optional[Dict[str, Any]]]:
         """Asynchronously translate texts using thread pool.
 
@@ -269,6 +286,7 @@ class TranslationService:
             beam_size: Beam size
             perform_sentence_splitting: Whether to split sentences
             include_metadata: Whether to include metadata in response
+            preferred_family: Preferred model family (opus-mt, mbart50, m2m100)
 
         Returns:
             Tuple of (list of translations, pivot_used flag, optional metadata dict)
@@ -288,7 +306,8 @@ class TranslationService:
             src,
             tgt,
             beam_size,
-            perform_sentence_splitting
+            perform_sentence_splitting,
+            preferred_family
         )
 
         # Reassemble chunks

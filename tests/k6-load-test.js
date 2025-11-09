@@ -194,19 +194,11 @@ export function teardown(data) {
 
 /**
  * Custom summary handler - runs after test to generate report
+ * Note: Requires k6 v0.30.0+ for textSummary. For older versions, this is optional.
  */
 export function handleSummary(data) {
-  const summary = {
-    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+  // Just write JSON summary - k6 will show its default summary on stdout
+  return {
+    'k6-summary.json': JSON.stringify(data, null, 2),
   };
-
-  // Also write JSON summary to file
-  summary['tests/k6-summary.json'] = JSON.stringify(data);
-
-  return summary;
-}
-
-// Helper function for text summary (basic version, k6 has built-in)
-function textSummary(data, options) {
-  return ''; // k6 will use its built-in summary
 }

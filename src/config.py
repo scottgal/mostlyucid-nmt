@@ -58,8 +58,8 @@ class Config:
     ]
 
     # Logging
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
-    REQUEST_LOG: bool = os.getenv("REQUEST_LOG", "0").lower() in ("1", "true", "yes")
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()  # Changed default from DEBUG to INFO
+    REQUEST_LOG: bool = os.getenv("REQUEST_LOG", "1").lower() in ("1", "true", "yes")  # Changed default to enabled
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "plain").lower()  # plain|json
     LOG_TO_FILE: bool = os.getenv("LOG_TO_FILE", "0").lower() in ("1", "true", "yes")
     LOG_FILE_PATH: str = os.getenv("LOG_FILE_PATH", "/var/log/mostlylucid-nmt/app.log")

@@ -27,7 +27,11 @@
       "Bash(timeout 5 bash:*)",
       "Bash(powershell -Command \"(Get-Content ''E:\\source\\mostlylucid-nmt\\BUILD.md'').Count\")",
       "Bash(docker image ls:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(dir /B /O-D E:sourcemostlylucid-nmt*.log 2)",
+      "Bash(nul)",
+      "Bash(k6 version:*)"
     ],
     "deny": [],
     "ask": []

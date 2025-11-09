@@ -147,7 +147,7 @@
           </div>
           <div class="space"></div>
           <div id="pairs" class="output" style="min-height:80px"></div>
-          <p class="muted">Note: The server selects the actual model family based on its configuration and availability. Family selection here is for discovery.</p>
+          <p class="muted">Note: You can select which model family to use for translation above. The server will use your selection or fall back to alternatives if the selected family doesn't support the language pair.</p>
           <p class="muted">API base: <span id="apiBase" class="pill"></span></p>
         </div>
       </div>
@@ -349,6 +349,7 @@
       const src = els.source.value; const tgt = els.target.value;
       const beam = Math.max(1, parseInt(els.beam.value || '5', 10));
       const split = els.split.value === 'true';
+      const modelFamily = els.modelFamily.value;  // Get selected model family
       els.out.textContent = '';
       els.pivotInfo.style.display = 'none';
       setStatus('Translating…', '#22d3ee');
@@ -371,7 +372,7 @@
             setStatus(`Translating chunk ${i+1}/${totalChunks}…`, '#22d3ee');
           }
 
-          const body = { text: [chunks[i]], target_lang: tgt, source_lang: src, beam_size: beam, perform_sentence_splitting: split };
+          const body = { text: [chunks[i]], target_lang: tgt, source_lang: src, beam_size: beam, perform_sentence_splitting: split, model_family: modelFamily };
           const res = await fetch(`${API_BASE}/translate`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
           });
