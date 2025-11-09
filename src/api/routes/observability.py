@@ -19,12 +19,6 @@ from src.models import (
 router = APIRouter()
 
 
-@router.get("/", include_in_schema=False)
-async def root():
-    """Redirect root to API docs."""
-    return RedirectResponse(url="/docs")
-
-
 @router.get(
     "/healthz",
     response_model=HealthResponse,

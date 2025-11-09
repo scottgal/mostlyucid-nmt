@@ -1,9 +1,30 @@
 # Dockerfile.gpu.min — Minimal GPU-enabled image with no preloaded models
-# Build example:
-#   docker build -f Dockerfile.gpu.min -t scottgal/mostlylucid-nmt:gpu-min --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#
+# FAST BUILD (no model downloads - ~30 seconds):
+#   Linux/Mac: docker build -f Dockerfile.gpu.min -t scottgal/mostlylucid-nmt:gpu-min --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#   Windows:   docker build -f Dockerfile.gpu.min -t scottgal/mostlylucid-nmt:gpu-min .
+#
+# FASTEST DEVELOPMENT WORKFLOW (code updates only):
+#   1. Build once: docker build -f Dockerfile.gpu.min -t dev-gpu .
+#   2. Code-only rebuild: ~3 seconds (just copies updated .py files)
+#   3. Zero-rebuild option: Mount source code directly
+#
+#      Linux/Mac:
+#        docker run --gpus all -p 8000:8000 -v $(pwd)/src:/app/src -v $(pwd)/app.py:/app/app.py -v ./model-cache:/models dev-gpu
+#
+#      Windows:
+#        docker run --gpus all -p 8000:8000 -v ${PWD}/src:/app/src -v ${PWD}/app.py:/app/app.py -v ${PWD}/model-cache:/models dev-gpu
+#
 # Run example (requires NVIDIA Container Toolkit):
-#   docker run --gpus all -e USE_GPU=true -v /path/to/model-cache:/models -p 8000:8000 scottgal/mostlylucid-nmt:gpu-min
-
+#   Linux/Mac: docker run --gpus all -e USE_GPU=true -v /path/to/model-cache:/models -p 8000:8000 scottgal/mostlylucid-nmt:gpu-min
+#   Windows:   docker run --gpus all -e USE_GPU=true -v ${PWD}/model-cache:/models -p 8000:8000 scottgal/mostlylucid-nmt:gpu-min
+#
+# LAYER CACHING: Optimized for fast rebuilds
+#   1. Base CUDA image (cached)
+#   2. System packages (cached)
+#   3. Python dependencies (cached unless requirements.txt changes)
+#   4. Source code (rebuilds on .py changes - FAST, ~3 seconds!)
+#
 FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu24.04
 
 # Build arguments for versioning
@@ -29,9 +50,19 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     # Point all caches to the mounted volume to avoid baking anything into the image
     HF_HOME=/models \
-    TRANSFORMERS_CACHE=/models \
     HF_DATASETS_CACHE=/models \
-    TORCH_HOME=/models
+    TORCH_HOME=/models \
+    # Performance defaults optimized for GPU (fast as possible)
+    # MAX_INFLIGHT_TRANSLATIONS should equal number of GPUs (1 GPU = 1 inflight)
+    # Concurrency is handled by EASYNMT_BATCH_SIZE (64) batching multiple texts within each request
+    # For multi-GPU: set MAX_INFLIGHT_TRANSLATIONS to GPU count and use CUDA_VISIBLE_DEVICES
+    WEB_CONCURRENCY=1 \
+    MAX_INFLIGHT_TRANSLATIONS=1 \
+    EASYNMT_BATCH_SIZE=64 \
+    EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
+    MAX_CACHED_MODELS=10 \
+    ENABLE_QUEUE=1 \
+    MAX_QUEUE_SIZE=2000
 
 # System deps (keep minimal; Python + certificates)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -46,11 +77,14 @@ COPY requirements.txt ./
 
 # Install Python deps from requirements first (will install CPU torch, then we upgrade to CUDA wheel)
 # Ubuntu 24.04 requires --break-system-packages for pip installs outside venv
-RUN pip3 install --break-system-packages -r requirements.txt
+# --no-cache-dir: Reduces image size by ~100MB (pip's cache isn't needed in the image)
+# Docker layer caching: When requirements.txt doesn't change, this layer is reused (FAST!)
+RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt
 
 # Install CUDA-enabled PyTorch matching CUDA 12.4 (compatible with CUDA 12.6 runtime)
 # See https://pytorch.org for the latest index URL mapping
-RUN pip3 install --break-system-packages --upgrade --index-url https://download.pytorch.org/whl/cu124 torch
+# --no-cache-dir: Same benefits - smaller image, Docker layer caching still works
+RUN pip3 install --break-system-packages --no-cache-dir --upgrade --index-url https://download.pytorch.org/whl/cu124 torch
 
 # Copy source code
 COPY src/ ./src/

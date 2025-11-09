@@ -1,7 +1,29 @@
 # Dockerfile.min - Minimal CPU image with no preloaded models
-# Build: docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:cpu-min --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#
+# FAST BUILD (no model downloads - ~30 seconds):
+#   Linux/Mac: docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:cpu-min --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#   Windows:   docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:cpu-min .
+#
+# FASTEST DEVELOPMENT WORKFLOW (code updates only):
+#   1. Build once: docker build -f Dockerfile.min -t dev .
+#   2. Code-only rebuild: ~3 seconds (just copies updated .py files)
+#   3. Zero-rebuild option: Mount source code directly
+#
+#      Linux/Mac:
+#        docker run -p 8000:8000 -v $(pwd)/src:/app/src -v $(pwd)/app.py:/app/app.py -v ./model-cache:/models dev
+#
+#      Windows:
+#        docker run -p 8000:8000 -v ${PWD}/src:/app/src -v ${PWD}/app.py:/app/app.py -v ${PWD}/model-cache:/models dev
+#
 # Run with volume mapping for model cache:
-#   docker run -p 8000:8000 -v /path/to/model-cache:/models scottgal/mostlylucid-nmt:cpu-min
+#   Linux/Mac: docker run -p 8000:8000 -v /path/to/model-cache:/models scottgal/mostlylucid-nmt:cpu-min
+#   Windows:   docker run -p 8000:8000 -v ${PWD}/model-cache:/models scottgal/mostlylucid-nmt:cpu-min
+#
+# LAYER CACHING: Optimized for fast rebuilds
+#   1. Base image (cached)
+#   2. Python dependencies (cached unless requirements.txt changes)
+#   3. Source code (rebuilds on .py changes - FAST, ~3 seconds!)
+#
 FROM python:3.12-slim
 
 # Build arguments for versioning
@@ -28,9 +50,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     # Point all caches to the mounted volume to avoid baking anything into the image
     HF_HOME=/models \
-    TRANSFORMERS_CACHE=/models \
     HF_DATASETS_CACHE=/models \
-    TORCH_HOME=/models
+    TORCH_HOME=/models \
+    # Performance defaults optimized for CPU (fast as possible)
+    WEB_CONCURRENCY=4 \
+    MAX_WORKERS_BACKEND=4 \
+    MAX_INFLIGHT_TRANSLATIONS=4 \
+    EASYNMT_BATCH_SIZE=16 \
+    MAX_CACHED_MODELS=5 \
+    ENABLE_QUEUE=1 \
+    MAX_QUEUE_SIZE=1000
 
 WORKDIR /app
 
@@ -39,6 +68,8 @@ WORKDIR /app
 # (If a dependency needs compilation, switch to the full CPU image)
 
 COPY requirements.txt .
+# --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)
+# Docker layer caching still works! When requirements.txt doesn't change, this layer is reused (fast!)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code (small)

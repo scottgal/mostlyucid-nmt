@@ -20,7 +20,12 @@
       "Bash(powershell -ExecutionPolicy Bypass -Command \"Get-Command -Syntax { . .\\build-all.ps1 }\")",
       "Bash(docker ps:*)",
       "Bash(docker rm:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -Command \"Get-Command -Syntax { . .\\build-dev.ps1 }\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"build-dev.ps1\" -WhatIf)",
+      "Bash(cat:*)",
+      "Bash(timeout 5 bash:*)",
+      "Bash(powershell -Command \"(Get-Content ''E:\\source\\mostlylucid-nmt\\BUILD.md'').Count\")"
     ],
     "deny": [],
     "ask": []

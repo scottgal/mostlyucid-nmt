@@ -1,0 +1,263 @@
+# MostlyLucid NMT API Tests
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+# Default base URL (change if needed)
+@baseUrl = http://localhost:8000
+
+###############################################################################
+# HEALTH & OBSERVABILITY ENDPOINTS
+###############################################################################
+
+### Health Check (Liveness)
+GET {{baseUrl}}/healthz
+
+### Readiness Check
+GET {{baseUrl}}/readyz
+
+### Cache Status
+GET {{baseUrl}}/cache
+
+### Model Information
+GET {{baseUrl}}/model_name
+
+### Root Redirect (should redirect to /demo/)
+GET {{baseUrl}}/
+###############################################################################
+# TRANSLATION ENDPOINTS
+###############################################################################
+
+### Translate (GET) - Single text
+GET {{baseUrl}}/translate?text=Hello world&target_lang=de&source_lang=en
+
+### Translate (GET) - Multiple texts
+GET {{baseUrl}}/translate?text=Hello&text=Goodbye&target_lang=fr&source_lang=en
+
+### Translate (GET) - Auto-detect source language
+GET {{baseUrl}}/translate?text=Bonjour&target_lang=en
+
+### Translate (POST) - Basic translation
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["Hello world", "How are you?"],
+  "target_lang": "de",
+  "source_lang": "en"
+}
+
+### Translate (POST) - Auto-detect source language
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["Hola mundo", "¿Cómo estás?"],
+  "target_lang": "en"
+}
+
+### Translate (POST) - With beam size
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["The quick brown fox jumps over the lazy dog"],
+  "target_lang": "de",
+  "source_lang": "en",
+  "beam_size": 3
+}
+
+### Translate (POST) - Disable sentence splitting
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["This is a long sentence. It has multiple parts. Each part is important."],
+  "target_lang": "fr",
+  "source_lang": "en",
+  "perform_sentence_splitting": false
+}
+
+### Translate (POST) - Empty text (should return empty list)
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": [],
+  "target_lang": "de",
+  "source_lang": "en"
+}
+
+### Translate (POST) - Large text (auto-chunking)
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."],
+  "target_lang": "de",
+  "source_lang": "en"
+}
+
+###############################################################################
+# LANGUAGE DETECTION ENDPOINTS
+###############################################################################
+
+### Language Detection (GET) - Single text
+GET {{baseUrl}}/language_detection?text=Hello world
+
+### Language Detection (GET) - German text
+GET {{baseUrl}}/language_detection?text=Guten Tag, wie geht es Ihnen?
+
+### Language Detection (POST) - String
+POST {{baseUrl}}/language_detection
+Content-Type: application/json
+
+{
+  "text": "Bonjour, comment allez-vous?"
+}
+
+### Language Detection (POST) - List of strings
+POST {{baseUrl}}/language_detection
+Content-Type: application/json
+
+{
+  "text": [
+    "Hello world",
+    "Hola mundo",
+    "Bonjour monde",
+    "Hallo Welt"
+  ]
+}
+
+### Language Detection (POST) - Dictionary
+POST {{baseUrl}}/language_detection
+Content-Type: application/json
+
+{
+  "text": {
+    "greeting": "こんにちは",
+    "farewell": "さようなら"
+  }
+}
+
+###############################################################################
+# LANGUAGE PAIRS & DISCOVERY
+###############################################################################
+
+### Get Supported Language Pairs
+GET {{baseUrl}}/lang_pairs
+
+### Get All Supported Languages
+GET {{baseUrl}}/get_languages
+
+### Get Languages (filter by source)
+GET {{baseUrl}}/get_languages?source=en
+
+### Get Languages (filter by target)
+GET {{baseUrl}}/get_languages?target=de
+
+### Discover Opus-MT Models
+GET {{baseUrl}}/discover/opus-mt
+
+### Discover mBART50 Language Pairs
+GET {{baseUrl}}/discover/mbart50
+
+### Discover M2M100 Language Pairs
+GET {{baseUrl}}/discover/m2m100
+
+### Discover All Model Families
+GET {{baseUrl}}/discover/all
+
+### Clear Discovery Cache
+POST {{baseUrl}}/discover/clear-cache
+
+###############################################################################
+# EASYNMT COMPATIBILITY ENDPOINTS
+###############################################################################
+
+### EasyNMT Translate (GET) - Legacy format
+GET {{baseUrl}}/easynmt/translate?text=Hello&target_lang=de&source_lang=en
+
+### EasyNMT Translate (POST) - Legacy format
+POST {{baseUrl}}/easynmt/translate
+Content-Type: application/json
+
+{
+  "text": "Hello world",
+  "target_lang": "de",
+  "source_lang": "en"
+}
+
+### EasyNMT Language Detection
+POST {{baseUrl}}/easynmt/language_detection
+Content-Type: application/json
+
+{
+  "text": "Hello world"
+}
+
+### EasyNMT Available Languages
+GET {{baseUrl}}/easynmt/available_languages
+
+### EasyNMT Language Pairs
+GET {{baseUrl}}/easynmt/lang_pairs
+
+###############################################################################
+# ERROR CASES & EDGE CASES
+###############################################################################
+
+### Invalid target language
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["Hello"],
+  "target_lang": "invalid_lang",
+  "source_lang": "en"
+}
+
+### Missing required field
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["Hello"]
+}
+
+### Invalid beam size (too small)
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["Hello"],
+  "target_lang": "de",
+  "source_lang": "en",
+  "beam_size": 0
+}
+
+### Very long text (stress test)
+POST {{baseUrl}}/translate
+Content-Type: application/json
+
+{
+  "text": ["This is a very long sentence that goes on and on and on. " * 50],
+  "target_lang": "de",
+  "source_lang": "en"
+}
+
+###############################################################################
+# DOCUMENTATION
+###############################################################################
+
+### OpenAPI Schema
+GET {{baseUrl}}/openapi.json
+
+### API Documentation (Swagger UI)
+GET {{baseUrl}}/docs
+
+### ReDoc Documentation
+GET {{baseUrl}}/redoc
+
+###############################################################################
+# DEMO UI
+###############################################################################
+
+### Demo UI
+GET {{baseUrl}}/demo/

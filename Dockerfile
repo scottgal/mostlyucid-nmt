@@ -1,5 +1,22 @@
 # Dockerfile - CPU production image with preloaded models
-# Build: docker build -t scottgal/mostlylucid-nmt:latest --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#
+# FULL BUILD (preloads models - SLOW, ~5-10 minutes):
+#   Linux/Mac: docker build -t scottgal/mostlylucid-nmt:latest --build-arg VERSION=$(date -u +"%Y%m%d.%H%M%S") .
+#   Windows:   docker build -t scottgal/mostlylucid-nmt:latest .
+#
+# FAST DEVELOPMENT WORKFLOW:
+#   Use Dockerfile.min instead! It skips model preloading:
+#   docker build -f Dockerfile.min -t dev:latest .        # ~30 seconds
+#
+#   Linux/Mac: docker run -v ./src:/app/src -v ./model-cache:/models dev:latest
+#   Windows:   docker run -v ${PWD}/src:/app/src -v ${PWD}/model-cache:/models dev:latest
+#
+# LAYER CACHING: This Dockerfile is optimized so code changes only rebuild the final layer:
+#   1. Base image (cached unless Python version changes)
+#   2. Python dependencies (cached unless requirements.txt changes)
+#   3. Model downloads (SLOW - cached unless PRELOAD_LANGS/PRELOAD_PAIRS change)
+#   4. Source code (rebuilds when .py files change - FAST!)
+#
 FROM python:3.12-slim
 
 # Build arguments for versioning
@@ -25,9 +42,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/app/models \
-    TRANSFORMERS_CACHE=/app/models \
     HF_DATASETS_CACHE=/app/models \
-    TORCH_HOME=/app/models
+    TORCH_HOME=/app/models \
+    # Performance defaults optimized for CPU (fast as possible)
+    WEB_CONCURRENCY=4 \
+    MAX_WORKERS_BACKEND=4 \
+    MAX_INFLIGHT_TRANSLATIONS=4 \
+    EASYNMT_BATCH_SIZE=16 \
+    MAX_CACHED_MODELS=5 \
+    ENABLE_QUEUE=1 \
+    MAX_QUEUE_SIZE=1000
 
 WORKDIR /app
 
@@ -35,6 +59,9 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt ./
+# --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)
+# --no-compile: Skip .pyc compilation (faster builds, negligible runtime impact)
+# Docker layer caching: When requirements.txt doesn't change, this layer is reused (FAST!)
 RUN pip install --no-cache-dir --no-compile -r requirements.txt
 
 # Preload a minimal, curated set of Opus-MT models into /app/models to avoid runtime downloads

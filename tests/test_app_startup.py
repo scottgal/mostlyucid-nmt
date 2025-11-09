@@ -16,7 +16,7 @@ def test_app_can_be_imported():
     """Test that the app module can be imported without errors."""
     from src.app import app
     assert isinstance(app, FastAPI)
-    assert app.title == "MostlyLucid NMT"
+    assert app.title == "mostlylucid-nmt"
 
 
 def test_app_startup_without_errors(app_client):

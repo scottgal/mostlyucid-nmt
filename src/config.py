@@ -14,8 +14,24 @@ class Config:
     TITLE = "mostlylucid-nmt"
 
     # Supported language codes (Opus-MT)
+    # This is a comprehensive list of major languages. For the complete list,
+    # use the /discover/opus-mt endpoint which queries Hugging Face dynamically.
     SUPPORTED_LANGS: List[str] = [
-        "en", "es", "fr", "de", "it", "zh", "nl", "hi", "ar", "uk", "fi", "sv", "el",
+        # Germanic languages
+        "en", "de", "nl", "sv", "da", "no", "is", "af",
+        # Romance languages
+        "es", "fr", "it", "pt", "ro", "ca", "gl",
+        # Slavic languages
+        "ru", "pl", "uk", "cs", "sk", "bg", "hr", "sr", "sl", "mk", "be",
+        # Other European
+        "el", "fi", "hu", "et", "lv", "lt", "ga", "cy", "eu", "sq", "mt",
+        # Asian languages
+        "zh", "ja", "ko", "ar", "he", "fa", "hi", "ur", "bn", "ta", "te", "th",
+        "vi", "id", "ms", "tr", "az", "ka", "hy", "kk", "uz",
+        # African languages
+        "sw", "am", "so", "yo", "ha", "ig",
+        # Other
+        "eo", "la",
     ]
 
     # mBART50 language codes (50 languages)

@@ -15,27 +15,30 @@
       --danger: #ef4444;
       --ok: #10b981;
     }
-    html, body { height: 100%; }
+    html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
     body {
       margin: 0; background: linear-gradient(180deg, #0b1220, #0f172a 40%);
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
       color: var(--text);
+      display: flex; flex-direction: column;
     }
-    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
-    header { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+    .container { display: flex; flex-direction: column; height: 100vh; padding: 16px; box-sizing: border-box; }
+    header { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-shrink: 0; }
     .badge { padding: 4px 10px; border-radius: 999px; background: rgba(167,139,250,.15); color: #e9d5ff; font-size: 12px; border: 1px solid rgba(167,139,250,.35); }
     h1 { margin: 0; font-size: 26px; letter-spacing: .3px; }
-    .grid { display: grid; grid-template-columns: 1.3fr .7fr; gap: 18px; }
+    .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; flex: 1; min-height: 0; }
     @media (max-width: 900px){ .grid { grid-template-columns: 1fr; }}
-    .card { background: linear-gradient(180deg, #0b1220, #0a0f1a); border: 1px solid #1f2937; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .card { background: linear-gradient(180deg, #0b1220, #0a0f1a); border: 1px solid #1f2937; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); display: flex; flex-direction: column; min-height: 0; }
     .card h2 { font-size: 14px; letter-spacing: .2px; color: var(--muted); margin: 0 0 14px 0; }
-    .card-body { padding: 18px; }
+    .card-body { padding: 18px; display: flex; flex-direction: column; overflow-y: auto; flex: 1; min-height: 0; }
     .row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
     .row + .row { margin-top: 10px; }
     label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; }
-    select, input[type="number"], input[type="text"], textarea { width: 100%; background: #0b1220; color: var(--text); border: 1px solid #223045; border-radius: 10px; padding: 10px 12px; outline: none; transition: border .2s ease, box-shadow .2s ease; }
+    select, input[type="number"], input[type="text"], textarea { width: 100%; background: #0b1220; color: var(--text); border: 1px solid #223045; border-radius: 10px; padding: 10px 12px; outline: none; transition: border .2s ease, box-shadow .2s ease; font-size: 14px; }
+    select { cursor: pointer; }
     select:focus, input[type="number"]:focus, input[type="text"]:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,.12); }
-    textarea { min-height: 160px; resize: vertical; line-height: 1.4; }
+    select option { background: #0b1220; color: var(--text); padding: 8px; }
+    textarea { flex: 1; min-height: 200px; resize: none; line-height: 1.5; box-sizing: border-box; }
     .btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #1e293b; color: #0b1220; background: linear-gradient(180deg, #67e8f9, #22d3ee); font-weight: 600; padding: 10px 14px; border-radius: 10px; cursor: pointer; transition: transform .06s ease; }
     .btn:active { transform: translateY(1px); }
     .btn.secondary { background: linear-gradient(180deg, #c7d2fe, #a78bfa); color: #0b1220; }
@@ -43,7 +46,7 @@
     .muted { color: var(--muted); font-size: 12px; }
     .stats { display: flex; gap: 12px; flex-wrap: wrap; }
     .stat { background: rgba(34, 211, 238, .08); border: 1px solid rgba(34,211,238,.3); color: #ccfbf1; padding: 8px 10px; border-radius: 10px; font-size: 12px; }
-    .output { white-space: pre-wrap; background: #050a12; border: 1px solid #1f2a40; border-radius: 10px; padding: 12px; min-height: 120px; }
+    .output { white-space: pre-wrap; background: #050a12; border: 1px solid #1f2a40; border-radius: 10px; padding: 12px; min-height: 120px; max-height: 300px; overflow-y: auto; line-height: 1.5; flex-shrink: 0; }
     .flex { display: flex; align-items: center; gap: 10px; }
     .space { height: 10px; }
     .link { color: #7dd3fc; text-decoration: none; border-bottom: 1px dashed rgba(125,211,252,.5); }
@@ -64,20 +67,26 @@
           <h2>Translate</h2>
           <div class="row">
             <div>
-              <label for="source">Source language (type or select)</label>
-              <input type="text" id="source" list="source-list" placeholder="e.g., en, fr, de..." />
-              <datalist id="source-list"></datalist>
+              <label for="source">Source language</label>
+              <select id="source"></select>
             </div>
             <div>
-              <label for="target">Target language (type or select)</label>
-              <input type="text" id="target" list="target-list" placeholder="e.g., de, es, zh..." />
-              <datalist id="target-list"></datalist>
+              <label for="target">Target language</label>
+              <select id="target"></select>
             </div>
             <div>
-              <button id="swap" class="btn ghost" title="Swap languages">⇄ Swap</button>
+              <button id="swap" class="btn ghost" title="Swap languages">&lt;-&gt; Swap</button>
             </div>
           </div>
           <div class="row">
+            <div>
+              <label for="modelFamily">Model family</label>
+              <select id="modelFamily">
+                <option value="opus-mt" selected>Opus‑MT (1200+ pairs)</option>
+                <option value="mbart50">mBART50 (50 languages)</option>
+                <option value="m2m100">M2M100 (100 languages)</option>
+              </select>
+            </div>
             <div>
               <label for="beam">Beam size</label>
               <input id="beam" type="number" min="1" max="10" value="5" />
@@ -89,8 +98,10 @@
                 <option value="false">Disabled</option>
               </select>
             </div>
-            <div class="flex" style="justify-content:flex-end">
-              <button id="detect" class="btn secondary" title="Detect language of text">Detect language</button>
+          </div>
+          <div class="row">
+            <div style="grid-column: 1 / -1;">
+              <button id="detect" class="btn secondary" title="Detect language of text" style="width: 100%;">Detect language of input text</button>
             </div>
           </div>
 
@@ -116,7 +127,7 @@
         <div class="card-body">
           <h2>Output</h2>
           <div id="pivot-info" class="muted" style="margin-bottom:10px; display:none">
-            <span style="color:#fbbf24">⚡ Pivot translation:</span> <span id="pivot-text"></span>
+            <span style="color:#fbbf24">Pivot translation:</span> <span id="pivot-text"></span>
           </div>
           <div id="output" class="output"></div>
           <div class="space"></div>
@@ -184,6 +195,7 @@
       out: document.getElementById('output'),
       beam: document.getElementById('beam'),
       split: document.getElementById('split'),
+      modelFamily: document.getElementById('modelFamily'),
       family: document.getElementById('family'),
       pairsBtn: document.getElementById('loadPairs'),
       pairs: document.getElementById('pairs'),
@@ -200,16 +212,15 @@
     }
 
     function fillLangs(list) {
-      const sourceList = document.getElementById('source-list');
-      const targetList = document.getElementById('target-list');
-      sourceList.innerHTML = ''; targetList.innerHTML = '';
+      els.source.innerHTML = '';
+      els.target.innerHTML = '';
 
       const names = [...list].map(code => ({ code, name: LANG_NAMES[code] || code.toUpperCase() }))
         .sort((a,b) => a.name.localeCompare(b.name));
 
       names.forEach(({code, name}) => {
-        sourceList.appendChild(option(`${name} (${code})`, code));
-        targetList.appendChild(option(`${name} (${code})`, code));
+        els.source.appendChild(option(`${name} (${code})`, code));
+        els.target.appendChild(option(`${name} (${code})`, code));
       });
 
       // sensible defaults
@@ -217,15 +228,19 @@
       els.target.value = 'de';
     }
 
-    // Add language to source datalist if not already present
+    // Add language to source select if not already present
     function addLanguageToSource(code) {
-      const sourceList = document.getElementById('source-list');
-      const existing = [...sourceList.options].find(o => o.value === code);
+      const existing = [...els.source.options].find(o => o.value === code);
 
       if (!existing) {
         const name = LANG_NAMES[code] || code.toUpperCase();
         const opt = option(`${name} (${code}) [detected]`, code);
-        sourceList.appendChild(opt);
+        els.source.appendChild(opt);
+
+        // Re-sort options alphabetically
+        const options = [...els.source.options].sort((a, b) => a.textContent.localeCompare(b.textContent));
+        els.source.innerHTML = '';
+        options.forEach(o => els.source.appendChild(o));
       }
       els.source.value = code;
     }
@@ -410,6 +425,12 @@
       } catch (e) {
         els.pairs.textContent = 'Failed to load pairs.';
       }
+    });
+
+    // Reload languages when model family changes
+    els.modelFamily.addEventListener('change', () => {
+      setStatus('Loading languages…', '#22d3ee');
+      loadLanguages();
     });
 
     // Init

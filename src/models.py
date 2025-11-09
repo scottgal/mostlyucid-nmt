@@ -15,13 +15,9 @@ class TranslatePostBody(BaseModel):
 
     @validator("text")
     def validate_text(cls, v):
-        """Ensure text is not empty."""
-        if isinstance(v, str):
-            if not v.strip():
-                raise ValueError("Text cannot be empty")
-        elif isinstance(v, list):
-            if not v:
-                raise ValueError("Text list cannot be empty")
+        """Normalize text input - empty lists/strings are allowed and handled gracefully."""
+        # Allow empty lists and empty strings - the endpoint will return empty results
+        # This makes the API "idiot proof" and maintains backward compatibility
         return v
 
     @validator("target_lang", "source_lang")

@@ -118,8 +118,13 @@ app = FastAPI(
 app.mount("/demo", StaticFiles(directory="public", html=True), name="demo")
 
 # Optional: redirect root to /demo
-@app.get("/")
+@app.get(
+    "/",
+    summary="Root Redirect",
+    description="Redirects to the interactive demo UI"
+)
 async def root_redirect():
+    """Redirect root to demo UI."""
     return RedirectResponse(url="/demo/")
 
 

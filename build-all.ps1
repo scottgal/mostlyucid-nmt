@@ -1,5 +1,21 @@
 # Build all Docker image variants with proper versioning
 # PowerShell script for Windows
+#
+# RAPID LOCAL TESTING:
+#   For fastest iteration, build ONLY the minimal variants (skip model downloads):
+#
+#   Just CPU minimal (30 seconds):
+#     docker build -f Dockerfile.min -t dev:latest .
+#
+#   Just GPU minimal (30 seconds):
+#     docker build -f Dockerfile.gpu.min -t dev:gpu .
+#
+#   Build only minimal variants from this script:
+#     Comment out the "full" builds below (CPU full and GPU full sections)
+#
+# FULL BUILD (production):
+#   Run this script as-is to build all 4 variants (~20-30 minutes total)
+#
 
 # Generate version string (datetime to the second)
 $VERSION = (Get-Date).ToUniversalTime().ToString("yyyyMMdd.HHmmss")

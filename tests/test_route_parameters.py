@@ -97,7 +97,7 @@ def test_translate_get_query_params_validation(app_client):
 
 
 @pytest.mark.integration
-def test_translate_get_default_values(app_client):
+def test_translate_get_default_values(app_client, mock_model_manager):
     """Test that translate GET endpoint uses correct default values."""
 
     response = app_client.get("/translate?target_lang=de&text=Hello")
@@ -105,8 +105,9 @@ def test_translate_get_default_values(app_client):
 
     data = response.json()
 
-    # Should have detected source language (default empty string triggers detection)
-    assert "source_lang" in data
+    # GET endpoint returns TranslateResponse with translations and optional pivot_path
+    assert "translations" in data
+    assert isinstance(data["translations"], list)
 
     # Should have used default beam_size
     # (Can't verify directly but endpoint should work)
@@ -229,7 +230,7 @@ def test_query_param_type_coercion(app_client):
 
 
 @pytest.mark.integration
-def test_empty_list_parameters_handled_correctly(app_client):
+def test_empty_list_parameters_handled_correctly(app_client, mock_model_manager):
     """Test that endpoints handle empty lists correctly.
 
     This specifically tests the fix for Optional[List[str]] → List[str] with default=[].
@@ -241,8 +242,8 @@ def test_empty_list_parameters_handled_correctly(app_client):
     data = response.json()
     assert data["translations"] == []
 
-    # POST with empty text list
-    response = app_client.post("/translate", json={"text": [], "target_lang": "de"})
+    # POST with empty text list (needs source_lang for validation)
+    response = app_client.post("/translate", json={"text": [], "target_lang": "de", "source_lang": "en"})
     assert response.status_code == 200
     data = response.json()
     assert data["translated"] == []
