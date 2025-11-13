@@ -165,15 +165,34 @@ class TranslationService:
         if config.EASYNMT_MAX_TEXT_LEN_INT is not None:
             gen_max_len = min(gen_max_len, max(1, config.EASYNMT_MAX_TEXT_LEN_INT))
 
+        # Apply symbol masking to protect special characters
+        masked_chunks: List[str] = []
+        mask_data: List[List[str]] = []
+
+        for chunk in chunks:
+            masked_text, originals = mask_symbols(chunk)
+            masked_chunks.append(masked_text)
+            mask_data.append(originals)
+
+        logger.debug(f"[Masking] Masked {len(chunks)} chunks, found {sum(len(m) for m in mask_data)} symbol sequences")
+
         out_chunks: List[str] = []
         bs = max(1, config.EASYNMT_BATCH_SIZE)
 
-        for i in range(0, len(chunks), bs):
-            batch = chunks[i:i + bs]
+        for i in range(0, len(masked_chunks), bs):
+            batch = masked_chunks[i:i + bs]
             res = translator(batch, max_length=gen_max_len, num_beams=eff_beam, batch_size=len(batch))
             out_chunks.extend([r.get("translation_text", "") for r in res])
 
-        return out_chunks
+        # Unmask symbols in translated output
+        final_chunks: List[str] = []
+        for translated, originals in zip(out_chunks, mask_data):
+            unmasked = unmask_symbols(translated, originals)
+            final_chunks.append(unmasked)
+
+        logger.debug(f"[Unmasking] Restored symbols in {len(final_chunks)} chunks")
+
+        return final_chunks
 
     def _translate_text_single(
         self,
@@ -225,10 +244,19 @@ class TranslationService:
                 return (combined, False, None)
             else:
                 logger.debug(f"[Translate] Translating without sentence splitting")
-                res = translator([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
+                # Apply symbol masking
+                masked_txt, originals = mask_symbols(txt)
+                logger.debug(f"[Masking] Masked text, found {len(originals)} symbol sequences")
+
+                res = translator([masked_txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                 logger.debug(f"[Translate] Raw result: {res}")
                 base = res[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
                 logger.debug(f"[Translate] Extracted translation_text: '{base}'")
+
+                # Unmask symbols
+                base = unmask_symbols(base, originals)
+                logger.debug(f"[Unmasking] Restored symbols")
+
                 base = remove_repeating_new_symbols(txt, base)
                 logger.info(f"[Translate] Success: '{base}'")
                 return (base, False, None)
@@ -272,11 +300,18 @@ class TranslationService:
                     combined = remove_repeating_new_symbols(txt, combined)
                     return (combined, True, None)
                 else:
-                    mid = trans_src_pivot([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
+                    # Apply symbol masking for pivot translation
+                    masked_txt, originals = mask_symbols(txt)
+
+                    mid = trans_src_pivot([masked_txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                     mid_txt = mid[0].get("translation_text", "")
 
                     fin = trans_pivot_tgt([mid_txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                     base = fin[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
+
+                    # Unmask symbols
+                    base = unmask_symbols(base, originals)
+
                     base = remove_repeating_new_symbols(txt, base)
                     return (base, True, None)
 
@@ -300,8 +335,15 @@ class TranslationService:
                             logger.info(f"[Fallback] Success with {fallback_family}: '{combined[:100]}'")
                             return (combined, False, None)  # Not a pivot, direct translation
                         else:
-                            res = translator_fallback([txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
+                            # Apply symbol masking for fallback translation
+                            masked_txt, originals = mask_symbols(txt)
+
+                            res = translator_fallback([masked_txt], max_length=gen_max_len, num_beams=eff_beam, batch_size=1)
                             base = res[0].get("translation_text", config.SANITIZE_PLACEHOLDER)
+
+                            # Unmask symbols
+                            base = unmask_symbols(base, originals)
+
                             base = remove_repeating_new_symbols(txt, base)
                             logger.info(f"[Fallback] Success with {fallback_family}: '{base[:100]}'")
                             return (base, False, None)  # Not a pivot, direct translation
