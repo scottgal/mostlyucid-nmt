@@ -36,7 +36,11 @@
       "Bash(docker buildx:*)",
       "Bash(docker info:*)",
       "Bash(pip install:*)",
-      "Bash(nvidia-smi:*)"
+      "Bash(nvidia-smi:*)",
+      "Bash(dir:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
