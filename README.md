@@ -7,7 +7,7 @@
 [![gpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu-min?label=gpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 
 
-> **APOLOGIES: Workign through some CI issues. Versions  *.*-20251109 and before are functional.**
+# <p style="color:red"> **APOLOGIES: Working through some CI issues. Versions  *.*-20251109 and before are functional.** </p>
 
 📖 **[Complete Guide & Tutorial](https://www.mostlylucid.net/blog/mostlylucid-nmt-complete-guide)** - Comprehensive walkthrough with examples and best practices
 
