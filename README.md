@@ -6,6 +6,9 @@
 [![gpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu?label=gpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 [![gpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu-min?label=gpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 
+
+> **APOLOGIES: Workign through some CI issues. Versions  *.*-20251109 and before are functional.**
+
 📖 **[Complete Guide & Tutorial](https://www.mostlylucid.net/blog/mostlylucid-nmt-complete-guide)** - Comprehensive walkthrough with examples and best practices
 
 A FastAPI service that provides an EasyNMT-like HTTP API for machine translation supporting multiple model families:
