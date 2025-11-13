@@ -98,4 +98,4 @@ EXPOSE 8000
 STOPSIGNAL SIGTERM
 
 # Use exec so Gunicorn becomes PID 1 and receives signals directly; add graceful timeout
-CMD ["/bin/sh", "-lc", "exec gunicorn -k uvicorn.workers.UvicornWorker -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:8000 --timeout ${TIMEOUT:-0} --graceful-timeout ${GRACEFUL_TIMEOUT:-30} --keep-alive ${KEEP_ALIVE:-5} app:app"]
+CMD ["/bin/sh", "-c", "exec gunicorn -k uvicorn.workers.UvicornWorker -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:8000 --timeout ${TIMEOUT:-0} --graceful-timeout ${GRACEFUL_TIMEOUT:-30} --keep-alive ${KEEP_ALIVE:-5} app:app"]

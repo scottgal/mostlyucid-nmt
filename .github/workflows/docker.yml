@@ -2,8 +2,13 @@ name: Build and Push Docker Images
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -11,7 +16,7 @@ permissions:
 
 concurrency:
   group: docker-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -50,7 +55,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -58,7 +63,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: docker/login-action@v3
         with:
           registry: docker.io
@@ -91,13 +96,13 @@ jobs:
           flavor: |
             latest=false
 
-      - name: Build Docker image
+      - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           pull: true
-          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          push: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
           platforms: ${{ matrix.platforms }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -109,7 +114,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
 
       - name: Update Docker Hub description
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.variant == 'cpu'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && matrix.variant == 'cpu'
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -120,25 +125,38 @@ jobs:
 
       - name: Build summary
         run: |
-          if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]; then
+          PUSHED="${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}"
+          EVENT="${{ github.event_name }}"
+          REF="${{ github.ref }}"
+
+          if [ "$PUSHED" == "true" ]; then
             echo "### ✅ Built and PUSHED: ${{ matrix.variant }}" >> $GITHUB_STEP_SUMMARY
+            STATUS="Pushed to Docker Hub and GHCR"
           else
-            echo "### ✅ Built (not pushed): ${{ matrix.variant }}" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔨 Built (validation only): ${{ matrix.variant }}" >> $GITHUB_STEP_SUMMARY
+            if [ "$EVENT" == "pull_request" ]; then
+              STATUS="Build-only validation for PR (not pushed)"
+            else
+              STATUS="Build-only validation for branch push (not pushed). Create a tag (v*.*.*) to push to registries."
+            fi
           fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Event:** $EVENT" >> $GITHUB_STEP_SUMMARY
+          echo "**Ref:** $REF" >> $GITHUB_STEP_SUMMARY
           echo "**Platforms:** ${{ matrix.platforms }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:${{ matrix.tags_suffix }}" >> $GITHUB_STEP_SUMMARY
-          echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:${{ matrix.tags_suffix }}-${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ matrix.is_latest }}" == "true" ]; then
-            echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:latest" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$PUSHED" == "true" ]; then
+            echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:${{ matrix.tags_suffix }}" >> $GITHUB_STEP_SUMMARY
+            echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:${{ matrix.tags_suffix }}-${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ matrix.is_latest }}" == "true" ]; then
+              echo "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mostlylucid-nmt:latest" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]; then
-            echo "**Status:** Pushed to Docker Hub and GHCR" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Status:** Build-only (not pushed to main branch)" >> $GITHUB_STEP_SUMMARY
-          fi
+
+          echo "**Status:** $STATUS" >> $GITHUB_STEP_SUMMARY
