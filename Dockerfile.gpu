@@ -70,6 +70,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Ensure Python can import from /app (for "from src.app import app")
+ENV PYTHONPATH=/app
+
 # Install Python dependencies excluding torch (we install CUDA torch separately)
 COPY requirements-prod.txt ./
 # --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)

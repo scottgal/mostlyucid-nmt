@@ -57,6 +57,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 
+# Ensure Python can import from /app (for "from src.app import app")
+ENV PYTHONPATH=/app
+
 # No extra system deps to keep image smaller (python:3.12-slim already includes what we need)
 
 # Install Python dependencies (production only, no test tools)

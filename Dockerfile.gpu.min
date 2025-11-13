@@ -75,6 +75,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Ensure Python can import from /app (for "from src.app import app")
+ENV PYTHONPATH=/app
+
 COPY requirements-prod.txt ./
 
 # Install Python deps from requirements first (will install CPU torch, then we upgrade to CUDA wheel)
