@@ -1,7 +1,8 @@
 """LRU cache for translation pipelines with intelligent memory monitoring."""
 
 from collections import OrderedDict
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, List
+import time
 import torch
 
 try:
@@ -20,6 +21,7 @@ class LRUPipelineCache(OrderedDict):
     - Automatic eviction when cache reaches capacity
     - Memory monitoring with configurable thresholds
     - Auto-eviction when system RAM or GPU VRAM gets critically low
+    - Time-based eviction for idle models (configurable)
     - Warning logs when memory usage is high
     - GPU memory cleanup on eviction
     """
@@ -33,6 +35,7 @@ class LRUPipelineCache(OrderedDict):
         super().__init__()
         self.capacity = max(1, capacity)
         self.operation_count = 0  # Track operations for periodic memory checks
+        self.last_access_times: dict[str, float] = {}  # Track last access time for each model
 
         if not PSUTIL_AVAILABLE:
             logger.warning("psutil not available - memory monitoring disabled. Install psutil for intelligent memory management.")
@@ -175,6 +178,8 @@ class LRUPipelineCache(OrderedDict):
             return
 
         old_key, old_val = self.popitem(last=False)
+        # Clean up access time tracking
+        self.last_access_times.pop(old_key, None)
         logger.info(f"🧹 Auto-evicted oldest model: {old_key} (memory management)")
 
         # Clean up GPU memory
@@ -227,6 +232,8 @@ class LRUPipelineCache(OrderedDict):
         while len(self) > 0:
             try:
                 old_key, old_val = self.popitem(last=False)
+                # Clean up access time tracking
+                self.last_access_times.pop(old_key, None)
                 logger.info(f"   Evicting: {old_key}")
 
                 # Clean up
@@ -240,6 +247,9 @@ class LRUPipelineCache(OrderedDict):
             except Exception as e:
                 logger.error(f"Error during emergency eviction: {e}")
                 break
+
+        # Clear any remaining access times (safety measure)
+        self.last_access_times.clear()
 
         # Aggressive CUDA cleanup
         if torch.cuda.is_available():
@@ -280,6 +290,74 @@ class LRUPipelineCache(OrderedDict):
 
         return False
 
+    def evict_idle_models(self, timeout_seconds: int) -> List[str]:
+        """Evict models that haven't been accessed for the specified timeout.
+
+        This method checks all cached models and evicts any that haven't been
+        accessed within the timeout period. Used for time-based cache eviction.
+
+        Args:
+            timeout_seconds: Evict models idle for longer than this (in seconds)
+
+        Returns:
+            List of evicted model keys
+        """
+        if timeout_seconds <= 0:
+            return []  # Feature disabled
+
+        current_time = time.time()
+        evicted_keys: List[str] = []
+
+        # Find models that have been idle too long
+        idle_models = []
+        for key in list(self.keys()):
+            last_access = self.last_access_times.get(key, 0)
+            idle_duration = current_time - last_access
+
+            if idle_duration > timeout_seconds:
+                idle_models.append((key, idle_duration))
+
+        if not idle_models:
+            return []
+
+        # Evict idle models
+        logger.info(f"⏰ Found {len(idle_models)} idle models (timeout: {timeout_seconds}s)")
+
+        for key, idle_duration in idle_models:
+            try:
+                if key in self:
+                    val = self.pop(key)
+                    self.last_access_times.pop(key, None)
+                    evicted_keys.append(key)
+
+                    idle_mins = int(idle_duration / 60)
+                    logger.info(f"⏰ Evicted idle model: {key} (idle for {idle_mins}m {int(idle_duration % 60)}s)")
+
+                    # Clean up GPU memory
+                    try:
+                        if hasattr(val, "model"):
+                            val.model.cpu()
+                            logger.debug(f"Moved evicted model {key} to CPU")
+                        del val
+                    except Exception as e:
+                        logger.debug(f"Error during idle eviction cleanup: {e}")
+
+            except Exception as e:
+                logger.error(f"Error evicting idle model {key}: {e}")
+
+        # Clear CUDA cache after evictions
+        if evicted_keys and torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                logger.debug(f"Cleared CUDA cache after idle evictions")
+            except Exception as e:
+                logger.debug(f"Error clearing CUDA cache: {e}")
+
+        if evicted_keys:
+            logger.info(f"⏰ Idle eviction complete: {len(evicted_keys)} models evicted ({len(self)}/{self.capacity} remaining)")
+
+        return evicted_keys
+
     def get(self, key: str) -> Optional[Any]:
         """Get pipeline from cache and move to end (most recently used).
 
@@ -294,6 +372,7 @@ class LRUPipelineCache(OrderedDict):
 
         if key in self:
             self.move_to_end(key)
+            self.last_access_times[key] = time.time()  # Update last access time
             logger.info(f"✓ Cache HIT: Reusing loaded model for {key} ({len(self)}/{self.capacity} models in cache)")
             return super().__getitem__(key)
         logger.info(f"✗ Cache MISS: Need to load model for {key} ({len(self)}/{self.capacity} models in cache)")
@@ -315,6 +394,7 @@ class LRUPipelineCache(OrderedDict):
 
         super().__setitem__(key, value)
         self.move_to_end(key)
+        self.last_access_times[key] = time.time()  # Update last access time
 
         if exists:
             logger.debug(f"Updated existing cache entry: {key}")
@@ -323,6 +403,8 @@ class LRUPipelineCache(OrderedDict):
 
         if not exists and len(self) > self.capacity:
             old_key, old_val = self.popitem(last=False)
+            # Clean up access time tracking
+            self.last_access_times.pop(old_key, None)
 
             logger.warning(f"⚠️  Cache FULL! Evicting oldest model: {old_key} (to make room for {key})")
 

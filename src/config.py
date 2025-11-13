@@ -165,6 +165,10 @@ class Config:
     GPU_MEMORY_CRITICAL_THRESHOLD: float = float(os.getenv("GPU_MEMORY_CRITICAL_THRESHOLD", "90.0"))  # Auto-evict at 90% VRAM
     MEMORY_CHECK_INTERVAL: int = int(os.getenv("MEMORY_CHECK_INTERVAL", "5"))  # Check memory every N cache operations
 
+    # Time-based model eviction (idle timeout)
+    MODEL_IDLE_TIMEOUT: int = int(os.getenv("MODEL_IDLE_TIMEOUT", "0"))  # Seconds before evicting idle models (0 = disabled)
+    IDLE_CHECK_INTERVAL: int = int(os.getenv("IDLE_CHECK_INTERVAL", "60"))  # How often to check for idle models (seconds)
+
     @classmethod
     def get_supported_langs(cls) -> List[str]:
         """Get supported language codes for current model family.

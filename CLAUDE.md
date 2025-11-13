@@ -455,6 +455,52 @@ Key invariants:
 2. **More workers**: `MAX_WORKERS_BACKEND=4`, `WEB_CONCURRENCY=2`
 3. **Parallelism**: `MAX_INFLIGHT_TRANSLATIONS=4`
 
+### Time-Based Model Eviction (Idle Timeout)
+
+**NEW FEATURE**: Automatically unload models that haven't been used for a configurable period.
+
+```bash
+MODEL_IDLE_TIMEOUT=3600      # Evict models idle for 1 hour (0 = disabled, default)
+IDLE_CHECK_INTERVAL=60       # Check for idle models every 60 seconds
+```
+
+**Use Cases**:
+- **Sporadic traffic**: Evict models between usage bursts to free memory
+- **Multi-language services**: Keep hot models loaded, evict rarely-used ones
+- **Memory-constrained**: Aggressively evict idle models (300s timeout)
+- **Development**: Quickly test different models without manual cleanup
+
+**How It Works**:
+- Tracks last access time for each cached model
+- Background task checks every `IDLE_CHECK_INTERVAL` seconds
+- Evicts models where `idle_duration > MODEL_IDLE_TIMEOUT`
+- Works alongside LRU and memory-based eviction
+
+**Example Configurations**:
+
+```bash
+# Conservative (production): 1 hour timeout
+MODEL_IDLE_TIMEOUT=3600
+IDLE_CHECK_INTERVAL=300
+
+# Aggressive (memory-constrained): 5 minute timeout
+MODEL_IDLE_TIMEOUT=300
+IDLE_CHECK_INTERVAL=60
+
+# Disabled (default): No time-based eviction
+MODEL_IDLE_TIMEOUT=0
+```
+
+**Logs**:
+```
+⏰ Idle model eviction enabled: 3600s timeout (check every 60s)
+⏰ Found 2 idle models (timeout: 3600s)
+⏰ Evicted idle model: en->fr (idle for 62m 15s)
+⏰ Idle eviction complete: 2 models evicted (3/10 remaining)
+```
+
+**See**: [IDLE_MODEL_EVICTION.md](IDLE_MODEL_EVICTION.md) for full documentation
+
 ## Critical Configuration
 
 ### Device Selection (src/core/device.py)

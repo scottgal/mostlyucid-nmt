@@ -29,20 +29,56 @@ _maintenance_task_handle: asyncio.Task = None
 
 
 async def _maintenance_task():
-    """Periodic CUDA cache clearing task."""
-    if config.CUDA_CACHE_CLEAR_INTERVAL_SEC <= 0:
+    """Periodic maintenance: CUDA cache clearing and idle model eviction."""
+    # Determine minimum interval from configured values
+    cuda_interval = config.CUDA_CACHE_CLEAR_INTERVAL_SEC
+    idle_interval = config.IDLE_CHECK_INTERVAL
+
+    # If both are disabled, don't run maintenance task
+    if cuda_interval <= 0 and config.MODEL_IDLE_TIMEOUT <= 0:
+        logger.info("Maintenance task disabled (CUDA_CACHE_CLEAR_INTERVAL_SEC=0 and MODEL_IDLE_TIMEOUT=0)")
         return
+
+    # Use the smallest positive interval, or default to 60 seconds if one is enabled
+    if cuda_interval > 0 and config.MODEL_IDLE_TIMEOUT > 0:
+        interval = min(cuda_interval, idle_interval)
+    elif cuda_interval > 0:
+        interval = cuda_interval
+    else:
+        interval = idle_interval
+
+    logger.info(f"Maintenance task started (interval: {interval}s, CUDA clearing: {cuda_interval > 0}, idle eviction: {config.MODEL_IDLE_TIMEOUT}s)")
+
+    cuda_counter = 0
+    idle_counter = 0
 
     while True:
         try:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                if config.REQUEST_LOG:
-                    logger.info("maintenance: torch.cuda.empty_cache()")
+            cuda_counter += interval
+            idle_counter += interval
+
+            # CUDA cache clearing
+            if cuda_interval > 0 and cuda_counter >= cuda_interval:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    if config.REQUEST_LOG:
+                        logger.debug("maintenance: torch.cuda.empty_cache()")
+                cuda_counter = 0
+
+            # Idle model eviction
+            if config.MODEL_IDLE_TIMEOUT > 0 and idle_counter >= idle_interval:
+                try:
+                    evicted = model_manager.cache.evict_idle_models(config.MODEL_IDLE_TIMEOUT)
+                    if evicted and config.REQUEST_LOG:
+                        logger.info(f"maintenance: evicted {len(evicted)} idle models")
+                except Exception as e:
+                    logger.warning(f"maintenance: idle eviction error: {e}")
+                idle_counter = 0
+
         except Exception as e:
             logger.warning(f"maintenance error: {e}")
 
-        await asyncio.sleep(config.CUDA_CACHE_CLEAR_INTERVAL_SEC)
+        await asyncio.sleep(interval)
 
 
 @asynccontextmanager
@@ -69,6 +105,10 @@ async def lifespan(app: FastAPI):
         logger.info(f"💾 Model cache configured: MAX_CACHED_MODELS={config.MAX_CACHED_MODELS}")
         logger.info(f"   Keeps up to {config.MAX_CACHED_MODELS} models loaded for instant switching (no reload wait)")
         logger.info(f"   Oldest models auto-evicted when cache full")
+        if config.MODEL_IDLE_TIMEOUT > 0:
+            logger.info(f"⏰ Idle model eviction enabled: {config.MODEL_IDLE_TIMEOUT}s timeout (check every {config.IDLE_CHECK_INTERVAL}s)")
+        else:
+            logger.info(f"⏰ Idle model eviction disabled (MODEL_IDLE_TIMEOUT=0)")
 
         # Preload models if requested
         if config.PRELOAD_MODELS:

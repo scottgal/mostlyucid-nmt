@@ -34,7 +34,9 @@
       "Bash(k6 version:*)",
       "Bash(chmod:*)",
       "Bash(docker buildx:*)",
-      "Bash(docker info:*)"
+      "Bash(docker info:*)",
+      "Bash(pip install:*)",
+      "Bash(nvidia-smi:*)"
     ],
     "deny": [],
     "ask": []
