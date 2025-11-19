@@ -1,4 +1,4 @@
-﻿"""EasyNMT compatibility handlers used by /compat endpoints.
+""EasyNMT compatibility handlers used by /compat endpoints.
 
 These functions mirror EasyNMT's behavior and response shapes exactly,
 without the extra fields added by MostlyLucid-NMT.

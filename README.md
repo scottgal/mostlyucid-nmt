@@ -1,4 +1,4 @@
-﻿# mostlylucid-nmt (EasyNMT-compatible API)
+ mostlylucid-nmt (EasyNMT-compatible API)
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/scottgal/mostlylucid-nmt)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 [![cpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu?label=cpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
