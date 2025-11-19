@@ -37,15 +37,13 @@
 
 | Tag | Points To | Updated On | Description |
 |-----|-----------|------------|-------------|
-| `:latest` | CPU full | Every tag push | **ALWAYS** the latest CPU image |
-| `:cpu` | CPU full | Every tag push | Latest CPU with preloaded models |
-| `:cpu-3.2.6` | CPU full | Version tags | Semantic versioned CPU |
-| `:cpu-min` | CPU minimal | Every tag push | Latest CPU, no preloaded models |
-| `:cpu-min-3.2.6` | CPU minimal | Version tags | Semantic versioned CPU minimal |
-| `:gpu` | GPU full | Every tag push | Latest GPU with preloaded models |
-| `:gpu-3.2.6` | GPU full | Version tags | Semantic versioned GPU |
-| `:gpu-min` | GPU minimal | Every tag push | Latest GPU, no preloaded models |
-| `:gpu-min-3.2.6` | GPU minimal | Version tags | Semantic versioned GPU minimal |
+| `:latest` | CPU | Every tag push | **ALWAYS** the latest CPU image |
+| `:cpu` | CPU | Every tag push | Latest CPU (on-demand model loading) |
+| `:cpu-3.2.6` | CPU | Version tags | Semantic versioned CPU |
+| `:gpu` | GPU | Every tag push | Latest GPU (on-demand model loading) |
+| `:gpu-3.2.6` | GPU | Version tags | Semantic versioned GPU |
+
+**Note:** All images use minimal base with on-demand model loading. No more bundled variants!
 
 ### For Users:
 
@@ -56,10 +54,8 @@ docker pull scottgal/mostlylucid-nmt:latest
 
 **Want specific variant?**
 ```bash
-docker pull scottgal/mostlylucid-nmt:cpu      # CPU with preloaded models
-docker pull scottgal/mostlylucid-nmt:cpu-min  # CPU minimal (fast download)
-docker pull scottgal/mostlylucid-nmt:gpu      # GPU with preloaded models
-docker pull scottgal/mostlylucid-nmt:gpu-min  # GPU minimal (fast download)
+docker pull scottgal/mostlylucid-nmt:cpu      # CPU (on-demand models)
+docker pull scottgal/mostlylucid-nmt:gpu      # GPU (on-demand models)
 ```
 
 **Want pinned version?**

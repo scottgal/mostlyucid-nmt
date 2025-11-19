@@ -25,23 +25,13 @@ jobs:
       matrix:
         include:
           - variant: cpu
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.min
             tags_suffix: cpu
             is_latest: true
             platforms: linux/amd64,linux/arm64
-          - variant: cpu-min
-            dockerfile: Dockerfile.min
-            tags_suffix: cpu-min
-            is_latest: false
-            platforms: linux/amd64,linux/arm64
           - variant: gpu
-            dockerfile: Dockerfile.gpu
-            tags_suffix: gpu
-            is_latest: false
-            platforms: linux/amd64
-          - variant: gpu-min
             dockerfile: Dockerfile.gpu.min
-            tags_suffix: gpu-min
+            tags_suffix: gpu
             is_latest: false
             platforms: linux/amd64
 

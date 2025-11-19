@@ -1,10 +1,9 @@
  mostlylucid-nmt (EasyNMT-compatible API)
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/scottgal/mostlylucid-nmt)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
+[![latest](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/latest?label=latest)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 [![cpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu?label=cpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
-[![cpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu-min?label=cpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 [![gpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu?label=gpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
-[![gpu-min](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu-min?label=gpu-min)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 
 
 📖 **[Complete Guide & Tutorial](https://www.mostlylucid.net/blog/mostlylucid-nmt-complete-guide)** - Comprehensive walkthrough with examples and best practices
@@ -319,7 +318,7 @@ MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"  # Quality-first fallback
       --build-arg PRELOAD_PAIRS="en->de,en->fr,fr->en" .
     ```
     - Smart pivot: For Opus‑MT, if a non-English direct pair is missing (e.g., `ja->de`), the preloader will fetch `ja->en` and `en->de` as a fallback.
-  - Minimal variants (`:cpu-min`, `:gpu-min`) preload nothing by design; they download on-demand unless you map a cache.
+  - Minimal variants (`:cpu`, `:gpu`) preload nothing by design; they download on-demand unless you map a cache.
 
 ### 3. Cache Overlay Support (Prepack Images)
 - You can map an external cache directory and it will work on top of the preloaded models.
@@ -333,7 +332,7 @@ MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"  # Quality-first fallback
   - Behavior: preloaded models are used directly from `/app/models`; any new downloads are stored in `/models` (your mapped cache), so they persist between runs.
 
 ### 4. Minimal Images: Cache Mapping is Optional
-- Minimal images (`:cpu-min`, `:gpu-min`) do not include preloaded models. Mapping a cache directory is recommended but optional:
+- Minimal images (`:cpu`, `:gpu`) do not include preloaded models. Mapping a cache directory is recommended but optional:
   - Without mapping a cache, the image will download models on-demand on each run (no persistence).
   - With `-v ./model-cache:/models -e MODEL_CACHE_DIR=/models`, models persist between runs.
 
@@ -394,9 +393,9 @@ MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"
 | Tag | Full Image Name | Size | Description | Use Case |
 |-----|-----------------|------|-------------|----------|
 | `cpu` (or `latest`) | `scottgal/mostlylucid-nmt:cpu` | ~2.5GB | CPU with source code | Production CPU deployments |
-| `cpu-min` | `scottgal/mostlylucid-nmt:cpu-min` | ~1.5GB | CPU minimal, no preloaded models | Volume-mapped cache, flexible |
+| `cpu` | `scottgal/mostlylucid-nmt:cpu` | ~1.5GB | CPU minimal, no preloaded models | Volume-mapped cache, flexible |
 | `gpu` | `scottgal/mostlylucid-nmt:gpu` | ~5GB | GPU with CUDA 12.6 + source | Production GPU deployments |
-| `gpu-min` | `scottgal/mostlylucid-nmt:gpu-min` | ~4GB | GPU minimal, no preloaded models | GPU with volume-mapped cache |
+| `gpu` | `scottgal/mostlylucid-nmt:gpu` | ~4GB | GPU minimal, no preloaded models | GPU with volume-mapped cache |
 
 **Benefits:**
 - ✅ Smaller image sizes
@@ -410,9 +409,9 @@ MODEL_FALLBACK_ORDER="opus-mt,mbart50,m2m100"
 ```bash
 # All from: scottgal/mostlylucid-nmt
 docker pull scottgal/mostlylucid-nmt:cpu       # CPU full (also available as :latest)
-docker pull scottgal/mostlylucid-nmt:cpu-min   # CPU minimal
+docker pull scottgal/mostlylucid-nmt:cpu   # CPU minimal
 docker pull scottgal/mostlylucid-nmt:gpu       # GPU full
-docker pull scottgal/mostlylucid-nmt:gpu-min   # GPU minimal
+docker pull scottgal/mostlylucid-nmt:gpu   # GPU minimal
 ```
 
 ### 6. Volume-Mapped Model Cache - NEW!
@@ -423,19 +422,19 @@ docker pull scottgal/mostlylucid-nmt:gpu-min   # GPU minimal
 docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:cpu-min
+  scottgal/mostlylucid-nmt:cpu
 
 # Windows PowerShell
 docker run -p 8000:8000 `
   -v ${HOME}/model-cache:/models `
   -e MODEL_CACHE_DIR=/models `
-  scottgal/mostlylucid-nmt:cpu-min
+  scottgal/mostlylucid-nmt:cpu
 
 # Windows CMD
 docker run -p 8000:8000 ^
   -v %USERPROFILE%/model-cache:/models ^
   -e MODEL_CACHE_DIR=/models ^
-  scottgal/mostlylucid-nmt:cpu-min
+  scottgal/mostlylucid-nmt:cpu
 ```
 
 ### 7. Auto-Chunking - NEW!
@@ -542,7 +541,7 @@ docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=mbart50 \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:cpu-min
+  scottgal/mostlylucid-nmt:cpu
 ```
 
 #### GPU (Docker Hub)
@@ -563,7 +562,7 @@ docker run --gpus all -p 8000:8000 \
   -e MODEL_FAMILY=m2m100 \
   -e MODEL_CACHE_DIR=/models \
   -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
-  scottgal/mostlylucid-nmt:gpu-min
+  scottgal/mostlylucid-nmt:gpu
 ```
 
 Open the docs at: http://localhost:8000/
@@ -615,20 +614,20 @@ Minimal images don't preload any models but download them on-demand and cache to
 #### CPU Minimal
 ```bash
 # Build
-docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:cpu-min .
+docker build -f Dockerfile.min -t scottgal/mostlylucid-nmt:cpu .
 
 # Run with volume mapping for model cache
 docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=opus-mt \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:cpu-min
+  scottgal/mostlylucid-nmt:cpu
 ```
 
 #### GPU Minimal
 ```bash
 # Build
-docker build -f Dockerfile.gpu.min -t mostlylucid-nmt:gpu-min .
+docker build -f Dockerfile.gpu.min -t mostlylucid-nmt:gpu .
 
 # Run with volume mapping and GPU
 docker run --gpus all -p 8000:8000 \
@@ -637,7 +636,7 @@ docker run --gpus all -p 8000:8000 \
   -e MODEL_FAMILY=mbart50 \
   -e MODEL_CACHE_DIR=/models \
   -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
-  scottgal/mostlylucid-nmt:gpu-min
+  scottgal/mostlylucid-nmt:gpu
 ```
 
 Benefits:
@@ -672,7 +671,7 @@ docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=mbart50 \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:cpu-min
+  scottgal/mostlylucid-nmt:cpu
 
 # GPU with FP16
 docker run --gpus all -p 8000:8000 \
@@ -681,7 +680,7 @@ docker run --gpus all -p 8000:8000 \
   -e MODEL_FAMILY=mbart50 \
   -e MODEL_CACHE_DIR=/models \
   -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
-  scottgal/mostlylucid-nmt:gpu-min
+  scottgal/mostlylucid-nmt:gpu
 ```
 
 #### M2M100 (100 languages, broadest coverage)
@@ -691,7 +690,7 @@ docker run -p 8000:8000 \
   -v ./model-cache:/models \
   -e MODEL_FAMILY=m2m100 \
   -e MODEL_CACHE_DIR=/models \
-  scottgal/mostlylucid-nmt:cpu-min
+  scottgal/mostlylucid-nmt:cpu
 
 # GPU with FP16
 docker run --gpus all -p 8000:8000 \
@@ -700,7 +699,7 @@ docker run --gpus all -p 8000:8000 \
   -e MODEL_FAMILY=m2m100 \
   -e MODEL_CACHE_DIR=/models \
   -e EASYNMT_MODEL_ARGS='{"torch_dtype":"fp16"}' \
-  scottgal/mostlylucid-nmt:gpu-min
+  scottgal/mostlylucid-nmt:gpu
 ```
 
 **Tip:** Use minimal images (`-min` tag) with volume-mapped cache for mBART50/M2M100 since they're single large models. This avoids embedding them in the image and allows sharing across containers.
@@ -1009,7 +1008,7 @@ This builds all 4 variants with automatic datetime versioning (format: `YYYYMMDD
 ### Versioning Strategy
 
 Each build creates **two tags** per variant:
-- **Named tag**: `latest`, `min`, `gpu`, `gpu-min` (always latest)
+- **Named tag**: `latest`, `min`, `gpu`, `gpu` (always latest)
 - **Version tag**: Immutable snapshot (e.g., `20250108.143022` or `min-20250108.143022`)
 
 Example:
