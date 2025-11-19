@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Preload a curated set of models into a fixed directory using Hugging Face snapshot_download,
 fetching only the minimal files required at runtime (weights + tokenizer/config).
@@ -11,9 +11,9 @@ Usage:
   python preload_models.py --family opus-mt --pairs "en->de,de->en,ja->de" --dest /app/models
 
 Notes:
-- Supports Opus‑MT. When using --langs, it preloads EN<->XX for each language.
+- Supports Opus-MT. When using --langs, it preloads EN<->XX for each language.
 - When using --pairs, it attempts to preload the exact direction XX->YY. If a direct
-  pair does not exist for Opus‑MT and neither side is English, it will try a smart
+  pair does not exist for Opus-MT and neither side is English, it will try a smart
   pivot preload via English by fetching XX->en and en->YY.
 - Downloads only allow-listed files to keep layers small.
 - If both safetensors and bin are present, safetensors will be preferred at runtime;

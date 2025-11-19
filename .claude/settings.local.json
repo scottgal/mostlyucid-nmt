@@ -40,7 +40,18 @@
       "Bash(dir:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(docker pull:*)",
+      "Bash(docker inspect:*)",
+      "Bash(python3:*)",
+      "Bash(docker history:*)",
+      "Bash(gh run list:*)",
+      "Bash(git tag:*)",
+      "Bash(git fetch:*)",
+      "Bash(git log:*)",
+      "Bash(docker manifest inspect:*)",
+      "Bash(docker rmi:*)",
+      "Bash(docker system prune:*)"
     ],
     "deny": [],
     "ask": []

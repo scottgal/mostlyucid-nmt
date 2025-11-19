@@ -1,4 +1,4 @@
-﻿.git
+.git
 .gitignore
 
 # Large caches and model data (use volume mounts instead)
