@@ -96,6 +96,11 @@ COPY src/ ./src/
 COPY public/ ./public/
 COPY app.py ./
 
+# CRITICAL: Remove any UTF-8 BOM characters that may have been introduced during COPY
+# BOMs (ef bb bf) cause "ModuleNotFoundError: No module named 'src.app'" under Gunicorn
+# This defensive fix ensures BOMs are stripped from all Python files in the final image
+RUN find /app -name "*.py" -type f -exec sed -i '1s/^\xEF\xBB\xBF//' {} \; || true
+
 # Create directory for model cache (can be mounted as volume)
 RUN mkdir -p /models
 
