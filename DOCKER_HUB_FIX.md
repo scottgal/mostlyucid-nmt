@@ -1,8 +1,21 @@
 # Docker Hub Fix - Complete Summary
 
 **Date:** 2025-11-19
-**Tag:** v3.2.6
-**Status:** Building in GitHub Actions
+**Latest Tag:** v3.3.1
+**Status:** Fixed - Building in GitHub Actions
+
+## Critical Update (v3.3.1)
+
+**Problem:** Despite removing BOMs from git and adding BOM removal to CI workflow, Docker images from v3.2.6 and v3.3.0 still failed with import errors.
+
+**Root Cause:** BOMs were being introduced during Docker COPY operations or persisting in ways not caught by pre-build removal.
+
+**Final Solution:** Added BOM removal **INSIDE the Dockerfiles** after COPY commands:
+```dockerfile
+RUN find /app -name "*.py" -type f -exec sed -i '1s/^\xEF\xBB\xBF//' {} \; || true
+```
+
+This ensures the actual files in the final Docker image are BOM-free, regardless of how BOMs got there.
 
 ## Issues Fixed
 
@@ -33,15 +46,15 @@
 
 ## New Docker Hub Tagging Strategy
 
-### After v3.2.6 Build Completes:
+### After v3.3.1 Build Completes:
 
 | Tag | Points To | Updated On | Description |
 |-----|-----------|------------|-------------|
 | `:latest` | CPU | Every tag push | **ALWAYS** the latest CPU image |
 | `:cpu` | CPU | Every tag push | Latest CPU (on-demand model loading) |
-| `:cpu-3.2.6` | CPU | Version tags | Semantic versioned CPU |
+| `:cpu-3.3.1` | CPU | Version tags | Semantic versioned CPU |
 | `:gpu` | GPU | Every tag push | Latest GPU (on-demand model loading) |
-| `:gpu-3.2.6` | GPU | Version tags | Semantic versioned GPU |
+| `:gpu-3.3.1` | GPU | Version tags | Semantic versioned GPU |
 
 **Note:** All images use minimal base with on-demand model loading. No more bundled variants!
 
@@ -60,8 +73,8 @@ docker pull scottgal/mostlylucid-nmt:gpu      # GPU (on-demand models)
 
 **Want pinned version?**
 ```bash
-docker pull scottgal/mostlylucid-nmt:cpu-3.2.6
-docker pull scottgal/mostlylucid-nmt:gpu-3.2.6
+docker pull scottgal/mostlylucid-nmt:cpu-3.3.1
+docker pull scottgal/mostlylucid-nmt:gpu-3.3.1
 ```
 
 ## Current Build Status
@@ -74,7 +87,7 @@ The workflow is building 4 variants in parallel:
 3. GPU full (with preloaded models) - amd64 only
 4. GPU minimal (no models) - amd64 only
 
-**Expected completion:** ~15-20 minutes from tag push (2025-11-19 12:14 UTC)
+**Expected completion:** ~15-20 minutes from tag push
 
 ## Verification Commands
 
@@ -93,8 +106,8 @@ docker pull scottgal/mostlylucid-nmt:gpu
 docker run --rm --gpus all -p 8000:8000 scottgal/mostlylucid-nmt:gpu
 
 # 4. Check versioned tags exist
-docker pull scottgal/mostlylucid-nmt:cpu-3.2.6
-docker pull scottgal/mostlylucid-nmt:gpu-3.2.6
+docker pull scottgal/mostlylucid-nmt:cpu-3.3.1
+docker pull scottgal/mostlylucid-nmt:gpu-3.3.1
 ```
 
 ## Git Commits
@@ -104,7 +117,11 @@ ee04f1e - Fix Docker import errors by removing UTF-8 BOM from all files
 8c7c566 - Add BOM removal to GitHub Actions CI/CD workflow
 e1d5e5f - Add comprehensive BOM fix summary and deployment instructions
 d855aae - Fix Docker Hub tagging: ensure :latest always points to CPU
-v3.2.6  - Release tag (triggers build with all fixes)
+v3.2.6  - Release tag (first attempt)
+87cf2aa - Simplify Docker images: drop bundled variants
+v3.3.0  - Release tag (still had BOM issues)
+a68b9b6 - Add in-container BOM removal to Dockerfiles (CRITICAL FIX)
+v3.3.1  - Release tag (definitive fix)
 ```
 
 ## What Changed in CI/CD Workflow
@@ -190,6 +207,13 @@ fi
 
 ---
 
-**Status:** All fixes committed and pushed. Tag v3.2.6 building now.
+**Status:** All fixes committed and pushed. Tag v3.3.1 building now with in-container BOM removal.
 
-**Next Steps:** Wait for GitHub Actions to complete, then verify Docker Hub images.
+**Next Steps:**
+1. Wait for GitHub Actions to complete (~15-20 minutes)
+2. Verify Docker Hub images work correctly:
+   ```bash
+   docker pull scottgal/mostlylucid-nmt:gpu-3.3.1
+   docker run --rm scottgal/mostlylucid-nmt:gpu-3.3.1 python -c "from src.app import app; print('SUCCESS')"
+   ```
+3. If successful, `:latest` and `:gpu` tags will also point to working images
