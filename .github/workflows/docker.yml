@@ -51,6 +51,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Remove BOM from all files
+        run: |
+          chmod +x tools/remove-bom.sh
+          ./tools/remove-bom.sh || echo "No BOMs found or already removed"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
