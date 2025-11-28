@@ -133,3 +133,75 @@ class TestUnmaskSymbols:
         restored = unmask_symbols(masked, originals)
         # Should have same punctuation and digits
         assert "$" in restored or "99" in restored
+
+    def test_unmask_with_double_quotes(self):
+        """Test unmasking when translation adds double quotes around placeholder."""
+        originals = ["!", "?"]
+        # Simulate translation adding quotes: ⟪MSK0⟫ -> "MSK0"
+        mangled = 'Hello "MSK0" World "MSK1"'
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Hello ! World ?"
+
+    def test_unmask_with_single_quotes(self):
+        """Test unmasking when translation adds single quotes around placeholder."""
+        originals = ["$99"]
+        mangled = "Price is 'MSK0'"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Price is $99"
+
+    def test_unmask_with_french_quotes(self):
+        """Test unmasking with French-style guillemet quotes."""
+        originals = ["!!!"]
+        mangled = "Attention «MSK0»"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Attention !!!"
+
+    def test_unmask_with_space_inserted(self):
+        """Test unmasking when translation inserts space in MSK token."""
+        originals = ["@user"]
+        mangled = "Contact MSK 0 for help"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Contact @user for help"
+
+    def test_unmask_case_insensitive(self):
+        """Test unmasking with case changes."""
+        originals = ["#hashtag"]
+        mangled = "Check out msk0"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Check out #hashtag"
+
+    def test_unmask_mixed_case(self):
+        """Test unmasking with mixed case."""
+        originals = ["123"]
+        mangled = "Number is Msk0"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Number is 123"
+
+    def test_unmask_brackets(self):
+        """Test unmasking with square brackets."""
+        originals = ["..."]
+        mangled = "Loading [MSK0]"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Loading ..."
+
+    def test_unmask_parentheses(self):
+        """Test unmasking with parentheses."""
+        originals = ["***"]
+        mangled = "Important (MSK0)"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Important ***"
+
+    def test_unmask_exact_match_preferred(self):
+        """Test that exact match is tried first (fastest path)."""
+        originals = ["!"]
+        # Exact format should work
+        mangled = "Hello ⟪MSK0⟫ World"
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Hello ! World"
+
+    def test_unmask_multiple_mangled(self):
+        """Test unmasking multiple mangled placeholders."""
+        originals = ["!", "?", "..."]
+        mangled = 'Start "MSK0" middle msk 1 end «MSK2»'
+        unmasked = unmask_symbols(mangled, originals)
+        assert unmasked == "Start ! middle ? end ..."

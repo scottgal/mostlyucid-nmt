@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(powershell -ExecutionPolicy Bypass -File \"tools/remove-bom.ps1\")"
+      "Bash(powershell -ExecutionPolicy Bypass -File \"tools/remove-bom.ps1\")",
+      "Bash(find:*)",
+      "Bash(python -m pytest:*)"
     ],
     "deny": [],
     "ask": []

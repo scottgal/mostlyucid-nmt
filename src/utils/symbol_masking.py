@@ -1,5 +1,6 @@
 """Symbol masking utilities for preserving special characters during translation."""
 
+import re
 import unicodedata
 from typing import List, Tuple
 
@@ -108,6 +109,12 @@ def mask_symbols(text: str) -> Tuple[str, List[str]]:
 def unmask_symbols(text: str, originals: List[str]) -> str:
     """Replace mask tokens with original symbol sequences.
 
+    Handles variations introduced by translation models:
+    - Added quotes: "MSK1", 'MSK1', «MSK1»
+    - Spaces: MSK 1, MSK  1
+    - Case changes: msk1, Msk1
+    - Missing brackets: MSK1 instead of ⟪MSK1⟫
+
     Args:
         text: Masked text with tokens
         originals: List of original symbol sequences
@@ -121,11 +128,30 @@ def unmask_symbols(text: str, originals: List[str]) -> str:
     out = text
 
     for idx, orig in enumerate(originals):
+        # Try exact match first (fastest path)
         token = f"{_MASK_PREFIX}{idx}{_MASK_SUFFIX}"
-        # Replace only the first occurrence each time to maintain order
         pos = out.find(token)
-        if pos == -1:
+        if pos != -1:
+            out = out[:pos] + orig + out[pos + len(token):]
             continue
-        out = out[:pos] + orig + out[pos + len(token):]
+
+        # Try quoted/bracketed version first (includes internal whitespace)
+        # Matches: "MSK 0", 'MSK0', «MSK 0», [MSK0], (MSK 0), etc.
+        quoted_pattern = (
+            r'["\'"«»⟪\[\(]'  # Required opening quote/bracket
+            rf'\s*[Mm][Ss][Kk]\s*{idx}\s*'  # MSK + index with optional internal spaces
+            r'["\'"»⟫\]\)]'  # Required closing quote/bracket
+        )
+        match = re.search(quoted_pattern, out)
+        if match:
+            out = out[:match.start()] + orig + out[match.end():]
+            continue
+
+        # Try bare version (no quotes, only internal space between MSK and number)
+        # Matches: MSK0, MSK 0, msk0, Msk 0, etc.
+        bare_pattern = rf'[Mm][Ss][Kk]\s*{idx}(?![0-9])'  # Negative lookahead to avoid MSK12 matching MSK1
+        match = re.search(bare_pattern, out)
+        if match:
+            out = out[:match.start()] + orig + out[match.end():]
 
     return out
