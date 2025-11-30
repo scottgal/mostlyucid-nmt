@@ -14,6 +14,7 @@ from src.utils.text_processing import (
     remove_repeating_new_symbols
 )
 from src.utils.symbol_masking import mask_symbols, unmask_symbols
+from src.utils.markdown_sanitizer import sanitize_translations
 
 
 class TranslationService:
@@ -415,7 +416,12 @@ class TranslationService:
                     first_error = f"Translation error: {str(e)}"
                 outputs.append(config.SANITIZE_PLACEHOLDER)
 
-        return (outputs, pivot_used, first_error)
+        # Apply markdown sanitization to prevent parser depth errors
+        sanitized_outputs, any_sanitized, sanitize_issues = sanitize_translations(outputs, src, tgt)
+        if any_sanitized and config.REQUEST_LOG:
+            logger.info(f"[Markdown] Sanitized {len(sanitize_issues)} issues for {src}->{tgt}: {sanitize_issues[:5]}")
+
+        return (sanitized_outputs, pivot_used, first_error)
 
     def _auto_chunk_texts(self, texts: List[str]) -> Tuple[List[str], List[Tuple[int, int]]]:
         """Auto-chunk texts that exceed max chunk size.

@@ -169,6 +169,15 @@ class Config:
     MODEL_IDLE_TIMEOUT: int = int(os.getenv("MODEL_IDLE_TIMEOUT", "0"))  # Seconds before evicting idle models (0 = disabled)
     IDLE_CHECK_INTERVAL: int = int(os.getenv("IDLE_CHECK_INTERVAL", "60"))  # How often to check for idle models (seconds)
 
+    # Markdown sanitization (prevents parser depth errors)
+    MARKDOWN_SANITIZE: bool = os.getenv("MARKDOWN_SANITIZE", "1").lower() in ("1", "true", "yes")
+    MARKDOWN_SAFE_MODE: bool = os.getenv("MARKDOWN_SAFE_MODE", "0").lower() in ("1", "true", "yes")  # Force strip complex markdown
+    MARKDOWN_SAFE_MODE_AUTO: bool = os.getenv("MARKDOWN_SAFE_MODE_AUTO", "1").lower() in ("1", "true", "yes")  # Auto-enable for problematic pairs
+    MARKDOWN_MAX_DEPTH: int = int(os.getenv("MARKDOWN_MAX_DEPTH", "10"))  # Max bracket nesting depth
+    MARKDOWN_PROBLEMATIC_PAIRS: List[str] = [
+        p.strip() for p in os.getenv("MARKDOWN_PROBLEMATIC_PAIRS", "").split(",") if p.strip()
+    ]  # e.g., "en->ar,en->he"
+
     @classmethod
     def get_supported_langs(cls) -> List[str]:
         """Get supported language codes for current model family.
