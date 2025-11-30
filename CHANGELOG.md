@@ -5,6 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2025-11-30
+
+### Added
+- **Markdown sanitization** to prevent Markdig parser "depth limit exceeded" errors:
+  - New `src/utils/markdown_sanitizer.py` module
+  - **Automatic markdown detection** - only sanitizes content detected as markdown
+  - Weighted confidence scoring for markdown pattern detection
+  - Balances unmatched brackets `[]` and parentheses `()`
+  - Fixes RTL bracket direction issues (Arabic, Hebrew, Farsi, Urdu)
+  - Breaks deeply nested structures exceeding configurable depth limit
+  - Fixes unbalanced emphasis markers (`**`, `*`, `__`, `_`)
+  - **Safe mode**: Strips complex markdown entirely for problematic language pairs
+  - Auto-enables safe mode for RTL target languages
+  - Plain text passes through unchanged (no unnecessary processing)
+- **Configuration options** for markdown sanitization:
+  - `MARKDOWN_SANITIZE=1` - Enable/disable sanitization (default: on)
+  - `MARKDOWN_SAFE_MODE=0` - Force strip complex markdown
+  - `MARKDOWN_SAFE_MODE_AUTO=1` - Auto-enable for RTL targets
+  - `MARKDOWN_MAX_DEPTH=10` - Maximum bracket nesting depth
+  - `MARKDOWN_PROBLEMATIC_PAIRS=` - Comma-separated `src->tgt` pairs for safe mode
+- **CLI validation tool** (`tools/validate_markdown.py`):
+  - Validate markdown depth and structure
+  - Sanitize problematic markdown
+  - Optional Markdig validation via .NET subprocess
+- **Docker Compose examples** for 15-model cache configurations:
+  - `docker-compose.cpu.yml` - CPU-optimized with parallelism
+  - `docker-compose.gpu.yml` - GPU-optimized with FP16
+- **66 new tests** for markdown sanitization (`tests/test_markdown_sanitizer.py`)
+
+### Improved
+- **Logging**: Reduced default verbosity; sanitization warnings visible by default
+- **Symbol unmasking** now handles more translation artifacts:
+  - Quoted variations: `"MSK0"`, `'MSK0'`, `«MSK0»`
+  - Bracketed variations: `[MSK0]`, `(MSK0)`
+  - Internal whitespace: `MSK 0`, `MSK  0`
+  - Case variations: `msk0`, `Msk0`
+
+## [3.3.1] - 2025-11-15
+
+### Fixed
+- **Docker Hub tagging**: Ensured `:latest` always points to CPU image
+- **BOM removal**: Added in-container UTF-8 BOM removal to all Dockerfiles
+- **CI/CD**: Only build Docker images on version tags (reduces CI costs)
+
+### Changed
+- Dropped bundled "full" Docker images (too large, 4-7GB)
+- Minimal variants (`:cpu`, `:gpu`) are now the only variants
+- Updated documentation with Docker Hub fix details
+
+## [3.3.0] - 2025-11-12
+
+### Added
+- **Idle model eviction**: Automatically unload models not used for a configurable period
+  - `MODEL_IDLE_TIMEOUT=3600` - Evict after 1 hour idle (0 = disabled)
+  - `IDLE_CHECK_INTERVAL=60` - Check frequency in seconds
+  - Works alongside LRU and memory-based eviction
+- **Periodic maintenance task**: Background task for CUDA cache clearing and idle eviction
+- **CUDA error resolution scripts**: `fix-cuda-errors.sh` and `fix-cuda-errors.ps1`
+- **Missing dependencies**: Added protobuf, tqdm, psutil to `requirements-prod.txt`
+
+### Fixed
+- PYTHONPATH issues in Docker containers
+- Various CUDA memory management improvements
+
+## [3.2.0] - 2025-11-11
+
+### Added
+- **ARM64 support**: Docker images for Raspberry Pi 5 and other ARM64 devices
+  - New `Dockerfile.arm64` and `Dockerfile.arm64.min`
+  - Sample `docker-compose-arm64.yml` for Pi deployment
+  - Pi-specific optimizations for memory-constrained environments
+
+### Fixed
+- Pi startup issues with model loading
+
+## [3.1.0] - 2025-11-10
+
+### Added
+- **Symbol masking/unmasking**: Protects special characters during translation
+  - Masks digits, punctuation, and emoji before translation
+  - Restores original symbols after translation
+  - Configurable via `SYMBOL_MASKING`, `MASK_DIGITS`, `MASK_PUNCT`, `MASK_EMOJI`
+- **Symbol masking documentation**: `SYMBOL_MASKING_FIX.md`
+- **Comprehensive symbol masking tests**: `test_markdown_masking.py`
+- Smoke test marker in pytest.ini for quick validation
+
+### Changed
+- Adjusted batch processing for symbol-masked text
+
 ## [3.0.0] - 2025-11-09
 
 Major release with enhanced demo page, performance optimisation, comprehensive testing suite, production-ready deployment documentation, and EasyNMT compatibility namespace.

@@ -46,6 +46,112 @@ _NESTED_LINK_PATTERN = re.compile(r'\[[^\]]*\[[^\]]*\]')  # [text[nested]]
 _NESTED_PAREN_IN_LINK = re.compile(r'\]\([^)]*\([^)]*\)')  # ](url(nested))
 _UNBALANCED_EMPHASIS = re.compile(r'(\*{1,3}|\_{1,3})(?:[^*_]*\1){3,}')  # ***a***b***c***
 
+@dataclass
+class MarkdownDetectionResult:
+    """Result of markdown detection."""
+    is_markdown: bool
+    confidence: float  # 0.0 to 1.0
+    patterns_found: List[str]
+    pattern_count: int
+
+
+# Markdown patterns with weights (higher = more indicative of markdown)
+_MARKDOWN_INDICATORS = [
+    # High confidence patterns (definitely markdown)
+    (re.compile(r'\[.+?\]\(.+?\)'), 1.0, "link"),                    # [text](url)
+    (re.compile(r'!\[.*?\]\(.+?\)'), 1.0, "image"),                  # ![alt](url)
+    (re.compile(r'^#{1,6}\s+.+', re.MULTILINE), 0.9, "header"),      # # Header
+    (re.compile(r'```[\s\S]*?```'), 1.0, "fenced_code"),             # ```code```
+    (re.compile(r'^\|.+\|.+\|', re.MULTILINE), 0.95, "table"),       # |col|col|
+    (re.compile(r'^\|-+\|', re.MULTILINE), 1.0, "table_separator"),  # |---|
+
+    # Medium confidence patterns
+    (re.compile(r'\*\*[^*\n]+\*\*'), 0.8, "bold_asterisk"),          # **bold**
+    (re.compile(r'__[^_\n]+__'), 0.8, "bold_underscore"),            # __bold__
+    (re.compile(r'(?<![*\w])\*[^*\n]+\*(?![*\w])'), 0.6, "italic_asterisk"),  # *italic*
+    (re.compile(r'(?<![_\w])_[^_\n]+_(?![_\w])'), 0.5, "italic_underscore"),  # _italic_
+    (re.compile(r'`[^`\n]+`'), 0.7, "inline_code"),                  # `code`
+    (re.compile(r'^\s*[-*+]\s+\S', re.MULTILINE), 0.6, "unordered_list"),  # - item
+    (re.compile(r'^\s*\d+\.\s+\S', re.MULTILINE), 0.6, "ordered_list"),    # 1. item
+    (re.compile(r'^>\s*.+', re.MULTILINE), 0.7, "blockquote"),       # > quote
+    (re.compile(r'\[.+?\]\[.+?\]'), 0.9, "reference_link"),          # [text][ref]
+    (re.compile(r'^\[.+?\]:\s*\S+', re.MULTILINE), 1.0, "link_definition"),  # [ref]: url
+
+    # Lower confidence (could be plain text)
+    (re.compile(r'~~.+?~~'), 0.8, "strikethrough"),                  # ~~strikethrough~~
+    (re.compile(r'^---+$', re.MULTILINE), 0.7, "horizontal_rule"),   # ---
+    (re.compile(r'^\*\*\*+$', re.MULTILINE), 0.7, "horizontal_rule_alt"),  # ***
+]
+
+# Threshold for considering text as markdown
+_MARKDOWN_CONFIDENCE_THRESHOLD = 0.5
+
+
+def detect_markdown(text: str) -> MarkdownDetectionResult:
+    """Detect if text is markdown with confidence score.
+
+    Uses pattern matching with weighted confidence to determine
+    if text contains markdown formatting.
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        MarkdownDetectionResult with is_markdown, confidence, and patterns found
+    """
+    if not text or len(text) < 2:
+        return MarkdownDetectionResult(
+            is_markdown=False,
+            confidence=0.0,
+            patterns_found=[],
+            pattern_count=0
+        )
+
+    patterns_found: List[str] = []
+    max_confidence = 0.0
+    total_weight = 0.0
+    match_count = 0
+
+    for pattern, weight, name in _MARKDOWN_INDICATORS:
+        matches = pattern.findall(text)
+        if matches:
+            patterns_found.append(name)
+            match_count += len(matches)
+            # Use the highest confidence pattern found
+            max_confidence = max(max_confidence, weight)
+            # Also track cumulative weight for multiple patterns
+            total_weight += weight * min(len(matches), 3)  # Cap at 3 matches per pattern
+
+    # Calculate final confidence
+    # High confidence if we found definitive patterns
+    # Boost confidence if multiple patterns found
+    if patterns_found:
+        pattern_bonus = min(0.2, len(patterns_found) * 0.05)
+        confidence = min(1.0, max_confidence + pattern_bonus)
+    else:
+        confidence = 0.0
+
+    is_md = confidence >= _MARKDOWN_CONFIDENCE_THRESHOLD
+
+    return MarkdownDetectionResult(
+        is_markdown=is_md,
+        confidence=confidence,
+        patterns_found=patterns_found,
+        pattern_count=match_count
+    )
+
+
+def is_markdown(text: str) -> bool:
+    """Quick check if text appears to be markdown content.
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        True if text contains markdown patterns with sufficient confidence
+    """
+    return detect_markdown(text).is_markdown
+
 
 def _count_nesting_depth(text: str) -> int:
     """Count maximum bracket nesting depth in text.
@@ -389,7 +495,10 @@ def sanitize_translations(
     source_lang: str,
     target_lang: str
 ) -> Tuple[List[str], bool, List[str]]:
-    """Sanitize a list of translations.
+    """Sanitize a list of translations containing markdown.
+
+    Only processes texts that are detected as markdown content.
+    Plain text is passed through unchanged.
 
     Args:
         translations: List of translated texts
@@ -410,6 +519,11 @@ def sanitize_translations(
     all_issues: List[str] = []
 
     for i, text in enumerate(translations):
+        # Skip non-markdown content
+        if not is_markdown(text):
+            results.append(text)
+            continue
+
         result = sanitize_markdown(
             text,
             source_lang=source_lang,

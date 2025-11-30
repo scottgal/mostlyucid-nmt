@@ -418,8 +418,9 @@ class TranslationService:
 
         # Apply markdown sanitization to prevent parser depth errors
         sanitized_outputs, any_sanitized, sanitize_issues = sanitize_translations(outputs, src, tgt)
-        if any_sanitized and config.REQUEST_LOG:
-            logger.info(f"[Markdown] Sanitized {len(sanitize_issues)} issues for {src}->{tgt}: {sanitize_issues[:5]}")
+        if any_sanitized:
+            # Log at WARNING since sanitization indicates translation produced malformed markdown
+            logger.warning(f"[Markdown] Sanitized {len(sanitize_issues)} issues for {src}->{tgt}: {sanitize_issues[:3]}")
 
         return (sanitized_outputs, pivot_used, first_error)
 

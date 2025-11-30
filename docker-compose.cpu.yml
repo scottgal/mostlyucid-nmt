@@ -1,0 +1,113 @@
+# Docker Compose - CPU optimized with 15 cached models
+#
+# Usage:
+#   docker compose -f docker-compose.cpu.yml up -d
+#
+# Requirements:
+#   - 8GB+ RAM recommended (15 Opus-MT models ≈ 4.5GB)
+#   - Multi-core CPU benefits from parallelism
+#
+# Model cache is persisted to ./model-cache for fast restarts
+
+services:
+  nmt:
+    image: scottgal/mostlylucid-nmt:latest
+    # Or build locally:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.min
+    container_name: nmt-cpu
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist models between restarts (avoids re-downloading)
+      - ./model-cache:/app/models
+    environment:
+      # ═══════════════════════════════════════════════════════════════════
+      # DEVICE SETTINGS
+      # ═══════════════════════════════════════════════════════════════════
+      USE_GPU: "false"
+      DEVICE: "cpu"
+
+      # ═══════════════════════════════════════════════════════════════════
+      # MODEL CACHE - 15 models in memory
+      # ═══════════════════════════════════════════════════════════════════
+      MAX_CACHED_MODELS: "15"
+      MODEL_CACHE_DIR: "/app/models"
+
+      # Preload common pairs at startup (optional - speeds up first requests)
+      # These will be loaded into the 15-slot cache immediately
+      PRELOAD_MODELS: "en->de,de->en,en->fr,fr->en,en->es,es->en,en->it,it->en"
+
+      # ═══════════════════════════════════════════════════════════════════
+      # CPU PARALLELISM - Maximize throughput
+      # ═══════════════════════════════════════════════════════════════════
+      # Gunicorn workers (each handles separate requests)
+      WEB_CONCURRENCY: "4"
+
+      # Backend thread pool for CPU-bound translation work
+      MAX_WORKERS_BACKEND: "4"
+
+      # How many translations can run simultaneously
+      # For CPU: match worker count for parallelism
+      MAX_INFLIGHT_TRANSLATIONS: "4"
+
+      # Batch size per translation (lower for CPU to reduce memory spikes)
+      EASYNMT_BATCH_SIZE: "8"
+
+      # ═══════════════════════════════════════════════════════════════════
+      # QUEUE MANAGEMENT
+      # ═══════════════════════════════════════════════════════════════════
+      ENABLE_QUEUE: "1"
+      MAX_QUEUE_SIZE: "500"
+      TRANSLATE_TIMEOUT_SEC: "180"
+
+      # ═══════════════════════════════════════════════════════════════════
+      # MEMORY MANAGEMENT
+      # ═══════════════════════════════════════════════════════════════════
+      # Auto-evict when RAM gets tight
+      ENABLE_MEMORY_MONITOR: "1"
+      MEMORY_WARNING_THRESHOLD: "75"
+      MEMORY_CRITICAL_THRESHOLD: "85"
+
+      # Evict idle models after 30 minutes (1800s) to free memory
+      MODEL_IDLE_TIMEOUT: "1800"
+      IDLE_CHECK_INTERVAL: "60"
+
+      # ═══════════════════════════════════════════════════════════════════
+      # MODEL FAMILY & FALLBACK
+      # ═══════════════════════════════════════════════════════════════════
+      MODEL_FAMILY: "opus-mt"
+      AUTO_MODEL_FALLBACK: "1"
+      PIVOT_FALLBACK: "1"
+      PIVOT_LANG: "en"
+
+      # ═══════════════════════════════════════════════════════════════════
+      # MARKDOWN SANITIZATION (for translated markdown content)
+      # ═══════════════════════════════════════════════════════════════════
+      MARKDOWN_SANITIZE: "1"
+      MARKDOWN_SAFE_MODE_AUTO: "1"
+      MARKDOWN_MAX_DEPTH: "10"
+
+      # ═══════════════════════════════════════════════════════════════════
+      # LOGGING
+      # ═══════════════════════════════════════════════════════════════════
+      LOG_LEVEL: "INFO"
+      REQUEST_LOG: "1"
+      LOG_FORMAT: "plain"
+
+    # Memory limit to prevent OOM (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 6G
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

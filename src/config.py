@@ -10,7 +10,7 @@ class Config:
     """Centralized configuration from environment variables."""
 
     # Application
-    VERSION = "3.0.0"
+    VERSION = "3.4.0"
     TITLE = "mostlylucid-nmt"
 
     # Supported language codes (Opus-MT)

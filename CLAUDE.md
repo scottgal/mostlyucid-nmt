@@ -35,7 +35,8 @@ mostlylucid-nmt/
 │   │   └── queue_manager.py    # Request queueing and backpressure
 │   ├── utils/                  # Utility modules
 │   │   ├── text_processing.py  # Sanitization, splitting, chunking
-│   │   └── symbol_masking.py   # Symbol masking/unmasking
+│   │   ├── symbol_masking.py   # Symbol masking/unmasking
+│   │   └── markdown_sanitizer.py # Markdown depth/bracket sanitization
 │   └── api/                    # API layer
 │       └── routes/             # Route modules
 │           ├── translation.py  # Translation endpoints
@@ -46,6 +47,7 @@ mostlylucid-nmt/
 │   ├── conftest.py             # Pytest fixtures and configuration
 │   ├── test_text_processing.py
 │   ├── test_symbol_masking.py
+│   ├── test_markdown_sanitizer.py
 │   ├── test_cache.py
 │   ├── test_config.py
 │   └── test_api_integration.py
@@ -97,6 +99,8 @@ Translate batches (EASYNMT_BATCH_SIZE)
 Unmask symbols (unmask_symbols)
   ↓
 Post-process (remove_repeating_new_symbols)
+  ↓
+Markdown sanitization (src/utils/markdown_sanitizer.py:sanitize_translations)
   ↓
 Return translations
 ```
@@ -438,6 +442,14 @@ Key invariants:
 - `mask_symbols(text)`: Returns (masked_text, originals)
 - `unmask_symbols(text, originals)`: Restores original symbols
 - Controlled by `SYMBOL_MASKING`, `MASK_DIGITS`, `MASK_PUNCT`, `MASK_EMOJI`
+
+**markdown_sanitizer.py**:
+- `detect_markdown(text)`: Returns `MarkdownDetectionResult` with confidence score
+- `is_markdown(text)`: Quick boolean check for markdown content
+- `sanitize_markdown(text)`: Fixes depth/bracket issues, returns `SanitizationResult`
+- `sanitize_translations(texts, src, tgt)`: Batch sanitization (skips non-markdown)
+- Only processes content detected as markdown; plain text passes through unchanged
+- Controlled by `MARKDOWN_SANITIZE`, `MARKDOWN_SAFE_MODE`, `MARKDOWN_MAX_DEPTH`
 
 ## Performance Optimization
 

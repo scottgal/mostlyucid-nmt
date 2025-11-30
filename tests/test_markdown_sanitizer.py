@@ -6,7 +6,10 @@ from src.utils.markdown_sanitizer import (
     validate_markdown_depth,
     sanitize_translations,
     should_use_safe_mode,
+    is_markdown,
+    detect_markdown,
     SanitizationResult,
+    MarkdownDetectionResult,
     _count_nesting_depth,
     _balance_brackets,
     _fix_rtl_brackets,
@@ -14,6 +17,95 @@ from src.utils.markdown_sanitizer import (
     _fix_nested_emphasis,
     _strip_complex_markdown,
 )
+
+
+class TestMarkdownDetection:
+    """Tests for markdown content detection."""
+
+    def test_plain_text_not_markdown(self):
+        """Plain text should not be detected as markdown."""
+        assert not is_markdown("Hello world")
+        assert not is_markdown("This is just plain text.")
+        assert not is_markdown("No formatting here at all")
+
+    def test_links_detected(self):
+        """Markdown links should be detected."""
+        assert is_markdown("[link](https://example.com)")
+        assert is_markdown("Check out [this site](http://test.com)")
+        assert is_markdown("Multiple [one](a) and [two](b)")
+
+    def test_images_detected(self):
+        """Markdown images should be detected."""
+        assert is_markdown("![alt text](image.jpg)")
+        assert is_markdown("![](image.png)")
+
+    def test_headers_detected(self):
+        """Markdown headers should be detected."""
+        assert is_markdown("# Header")
+        assert is_markdown("## Subheader")
+        assert is_markdown("### Level 3")
+        assert is_markdown("Text\n# Header\nMore text")
+
+    def test_code_blocks_detected(self):
+        """Code blocks should be detected."""
+        assert is_markdown("```python\ncode\n```")
+        assert is_markdown("Use `inline code` here")
+
+    def test_bold_detected(self):
+        """Bold formatting should be detected."""
+        assert is_markdown("This is **bold** text")
+        assert is_markdown("This is __also bold__")
+
+    def test_italic_detected(self):
+        """Italic formatting should be detected."""
+        assert is_markdown("This is *italic* text")
+
+    def test_lists_detected(self):
+        """Lists should be detected."""
+        assert is_markdown("- Item one\n- Item two")
+        assert is_markdown("* Bullet point")
+        assert is_markdown("1. First item\n2. Second item")
+
+    def test_blockquotes_detected(self):
+        """Blockquotes should be detected."""
+        assert is_markdown("> This is a quote")
+
+    def test_tables_detected(self):
+        """Tables should be detected."""
+        assert is_markdown("| Col1 | Col2 |")
+        assert is_markdown("|---|---|")
+
+    def test_reference_links_detected(self):
+        """Reference-style links should be detected."""
+        assert is_markdown("[text][ref]")
+        assert is_markdown("[ref]: https://example.com")
+
+    def test_empty_not_markdown(self):
+        """Empty strings should not be markdown."""
+        assert not is_markdown("")
+        assert not is_markdown("a")
+
+    def test_confidence_scores(self):
+        """Test confidence scoring."""
+        # High confidence for definitive patterns
+        result = detect_markdown("[link](url)")
+        assert result.confidence >= 0.9
+        assert "link" in result.patterns_found
+
+        # Multiple patterns boost confidence
+        result = detect_markdown("# Header\n[link](url)\n**bold**")
+        assert result.confidence >= 0.9
+        assert len(result.patterns_found) >= 3
+
+        # Plain text has zero confidence
+        result = detect_markdown("Just plain text")
+        assert result.confidence == 0.0
+        assert not result.is_markdown
+
+    def test_mixed_content(self):
+        """Text with markdown embedded in plain text."""
+        assert is_markdown("Please visit [our site](https://example.com) for more info.")
+        assert is_markdown("Use the `config.yaml` file to configure settings.")
 
 
 class TestCountNestingDepth:
@@ -263,14 +355,26 @@ class TestSanitizeTranslations:
     """Tests for batch translation sanitization."""
 
     def test_list_sanitization(self):
+        """Test sanitization of markdown content in list."""
         texts = [
-            "Clean text",
-            "Unbalanced [bracket",
-            "[[[[deep]]]]"
+            "Clean [link](url) text",  # Valid markdown, no issues
+            "Unbalanced [link](url[nested)",  # Markdown with unbalanced brackets
+            "[[[[deep]]]](url)"  # Deeply nested markdown
         ]
         results, any_sanitized, issues = sanitize_translations(texts, "en", "fr")
         assert len(results) == len(texts)
         assert any_sanitized
+
+    def test_plain_text_skipped(self):
+        """Non-markdown content should be passed through unchanged."""
+        texts = [
+            "Plain text without any markdown",
+            "Just regular sentences here.",
+            "No links, no formatting."
+        ]
+        results, any_sanitized, issues = sanitize_translations(texts, "en", "fr")
+        assert results == texts  # Unchanged
+        assert not any_sanitized  # Nothing sanitized
 
     def test_disabled_returns_unchanged(self):
         from src.config import config

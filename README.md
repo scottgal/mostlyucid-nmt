@@ -23,6 +23,8 @@ A production-ready FastAPI service providing an EasyNMT-compatible HTTP API for 
 - Intelligent memory management to prevent OOM crashes
 - Automatic fallback across model families
 - Pivot translation with intelligent path selection
+- **Markdown sanitization** to prevent parser depth errors (v3.4+)
+- Symbol masking to protect special characters during translation
 - Swagger UI at `/docs` and ReDoc at `/redoc`
 
 ---
@@ -70,12 +72,12 @@ docker run -p 8000:8000 \
 ### 3. Wrong Docker Tag
 **Problem:** Using old tag names from v2.x
 
-**Current tags (v3.3+):**
+**Current tags (v3.4+):**
 - `:latest` - CPU image (alias for `:cpu`)
 - `:cpu` - CPU, no preloaded models
 - `:gpu` - GPU with CUDA 12.6, no preloaded models
-- `:cpu-3.3.1` - Pinned version (semantic versioning)
-- `:gpu-3.3.1` - Pinned GPU version
+- `:cpu-3.4.0` - Pinned version (semantic versioning)
+- `:gpu-3.4.0` - Pinned GPU version
 
 **Old tags removed:**
 - `:cpu-min`, `:gpu-min` - Replaced by `:cpu` and `:gpu`
@@ -312,9 +314,44 @@ Key environment variables (defaults in parentheses):
 - `GRACEFUL_TIMEOUT=20` (`20`) - Graceful shutdown timeout
 
 ### Logging
-- `LOG_LEVEL=INFO` (`INFO`) - Log level
-- `LOG_TO_FILE=1` (`0`) - Enable file logging
-- `LOG_FORMAT=plain|json` (`plain`) - Log format
+Default logging is minimal (errors, model loading, startup). Increase verbosity for debugging:
+
+```bash
+# Default: minimal logging
+-e LOG_LEVEL=INFO
+
+# Verbose: all translation details, masking, sanitization
+-e LOG_LEVEL=DEBUG
+
+# Enable file logging (rotates at 10MB, keeps 5 backups)
+-e LOG_TO_FILE=1
+-e LOG_FILE_PATH=/var/log/nmt/app.log
+
+# JSON format for log aggregation (ELK, Datadog, etc.)
+-e LOG_FORMAT=json
+
+# Include translated text in logs (privacy risk - off by default)
+-e LOG_INCLUDE_TEXT=1
+```
+
+**Log levels:** `DEBUG` < `INFO` < `WARNING` < `ERROR`
+
+### Markdown Sanitization (v3.4+)
+Prevents Markdig/parser "depth limit exceeded" errors from translated markdown. Only processes content detected as markdown (plain text passes through unchanged).
+
+- `MARKDOWN_SANITIZE=1` (`1`) - Enable sanitization of translated markdown
+- `MARKDOWN_SAFE_MODE=0` (`0`) - Force strip complex markdown (links, images)
+- `MARKDOWN_SAFE_MODE_AUTO=1` (`1`) - Auto-enable safe mode for RTL targets (Arabic, Hebrew, etc.)
+- `MARKDOWN_MAX_DEPTH=10` (`10`) - Maximum bracket nesting depth
+- `MARKDOWN_PROBLEMATIC_PAIRS=""` - Force safe mode for specific pairs (e.g., `en->ar,en->he`)
+
+**What it fixes:**
+- Unbalanced brackets `[]` and parentheses `()`
+- RTL bracket direction issues (common in Arabic/Hebrew translations)
+- Deeply nested structures that exceed parser limits
+- Unbalanced emphasis markers (`**`, `*`, `__`, `_`)
+
+**Logs:** Sanitization events logged at `WARNING` level (visible by default)
 
 For full configuration reference, see inline comments in source or `/model_name` endpoint output.
 
@@ -376,7 +413,7 @@ docker build -f Dockerfile.gpu.min -t scottgal/mostlylucid-nmt:gpu .
 
 **Versioning:**
 - Named tags: `:latest`, `:cpu`, `:gpu`
-- Version tags: `:cpu-3.3.1`, `:gpu-3.3.1` (semantic versioning)
+- Version tags: `:cpu-3.4.0`, `:gpu-3.4.0` (semantic versioning)
 
 For detailed build instructions and CI/CD integration, see [BUILD.md](BUILD.md).
 
