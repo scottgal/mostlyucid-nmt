@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2025-11-30
+
+### Changed
+- **CPU Docker images ~1.8GB smaller**: Switched to CPU-only PyTorch builds
+  - New `requirements-prod-cpu.txt` excludes torch (installed separately)
+  - `Dockerfile` and `Dockerfile.min` now use `--index-url https://download.pytorch.org/whl/cpu`
+  - CPU torch: ~200MB vs ~2.2GB with CUDA libraries
+  - Final CPU image size: ~1.65GB (down from ~3.5GB)
+  - GPU images unchanged (still use CUDA-enabled PyTorch)
+
 ## [3.4.0] - 2025-11-30
 
 ### Added

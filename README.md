@@ -72,12 +72,12 @@ docker run -p 8000:8000 \
 ### 3. Wrong Docker Tag
 **Problem:** Using old tag names from v2.x
 
-**Current tags (v3.4+):**
+**Current tags (v3.5+):**
 - `:latest` - CPU image (alias for `:cpu`)
-- `:cpu` - CPU, no preloaded models
-- `:gpu` - GPU with CUDA 12.6, no preloaded models
-- `:cpu-3.4.0` - Pinned version (semantic versioning)
-- `:gpu-3.4.0` - Pinned GPU version
+- `:cpu` - CPU-only PyTorch (~1.65GB, no CUDA libraries)
+- `:gpu` - GPU with CUDA 12.6
+- `:cpu-3.5.0` - Pinned version (semantic versioning)
+- `:gpu-3.5.0` - Pinned GPU version
 
 **Old tags removed:**
 - `:cpu-min`, `:gpu-min` - Replaced by `:cpu` and `:gpu`
@@ -413,7 +413,7 @@ docker build -f Dockerfile.gpu.min -t scottgal/mostlylucid-nmt:gpu .
 
 **Versioning:**
 - Named tags: `:latest`, `:cpu`, `:gpu`
-- Version tags: `:cpu-3.4.0`, `:gpu-3.4.0` (semantic versioning)
+- Version tags: `:cpu-3.5.0`, `:gpu-3.5.0` (semantic versioning)
 
 For detailed build instructions and CI/CD integration, see [BUILD.md](BUILD.md).
 

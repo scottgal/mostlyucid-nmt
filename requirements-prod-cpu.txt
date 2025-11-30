@@ -1,0 +1,18 @@
+# requirements-prod-cpu.txt
+# Production dependencies for CPU-only builds (no CUDA, ~1.8GB smaller)
+#
+# NOTE: torch is installed separately in Dockerfile with --index-url for CPU-only version
+# Full torch+cuda: ~2.2GB, CPU-only torch: ~200MB
+
+fastapi>=0.109.0
+pydantic>=2.0.0
+uvicorn[standard]>=0.27.0
+gunicorn>=21.2.0
+transformers>=4.36.0
+langdetect>=1.0.9
+sentencepiece>=0.1.99
+sacremoses>=0.0.53
+protobuf>=3.20.0
+tqdm>=4.66.0
+psutil>=5.9.0
+httpx>=0.26.0

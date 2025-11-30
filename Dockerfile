@@ -62,12 +62,16 @@ ENV PYTHONPATH=/app
 
 # No extra system deps to keep image smaller (python:3.12-slim already includes what we need)
 
-# Install Python dependencies (production only, no test tools)
-COPY requirements-prod.txt ./
+# Install CPU-only PyTorch first (from PyTorch's CPU index, ~200MB vs ~2.2GB with CUDA)
+# This must be done before requirements to avoid pip pulling CUDA version as dependency
+RUN pip install --no-cache-dir --no-compile --index-url https://download.pytorch.org/whl/cpu torch
+
+# Install remaining dependencies from PyPI (production only, no test tools)
+COPY requirements-prod-cpu.txt ./
 # --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)
 # --no-compile: Skip .pyc compilation (faster builds, negligible runtime impact)
 # Docker layer caching: When requirements changes, this layer rebuilds
-RUN pip install --no-cache-dir --no-compile -r requirements-prod.txt
+RUN pip install --no-cache-dir --no-compile -r requirements-prod-cpu.txt
 
 # Preload a minimal, curated set of Opus-MT models into /app/models to avoid runtime downloads
 # Default build arg preloads EN<->(es,fr,de,it). Prefer specifying explicit pairs via PRELOAD_PAIRS.

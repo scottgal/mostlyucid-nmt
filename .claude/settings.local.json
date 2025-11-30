@@ -3,7 +3,19 @@
     "allow": [
       "Bash(powershell -ExecutionPolicy Bypass -File \"tools/remove-bom.ps1\")",
       "Bash(find:*)",
-      "Bash(python -m pytest:*)"
+      "Bash(python -m pytest:*)",
+      "Bash(docker build:*)",
+      "Bash(docker images:*)",
+      "Bash(docker run:*)",
+      "Bash(docker rm:*)",
+      "Bash(timeout:*)",
+      "Bash(docker logs:*)",
+      "Bash(ping:*)",
+      "Bash(nul)",
+      "Bash(curl:*)",
+      "Bash(docker stop:*)",
+      "Bash(cd:*)",
+      "Bash(powershell -Command \"docker build -f E:/source/mostlylucid-nmt/Dockerfile.gpu.min -t mostlylucid-nmt:gpu-test E:/source/mostlylucid-nmt/\")"
     ],
     "deny": [],
     "ask": []

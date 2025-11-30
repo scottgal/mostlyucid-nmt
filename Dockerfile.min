@@ -72,10 +72,15 @@ ENV PYTHONPATH=/app
 # Keep image minimal by avoiding build toolchains
 # (If a dependency needs compilation, switch to the full CPU image)
 
-COPY requirements-prod.txt .
+# Install CPU-only PyTorch first (from PyTorch's CPU index, ~200MB vs ~2.2GB with CUDA)
+# This must be done before requirements to avoid pip pulling CUDA version as dependency
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
+
+# Install remaining dependencies from PyPI
+COPY requirements-prod-cpu.txt .
 # --no-cache-dir: Reduces image size by not storing pip's download cache (~100MB saved)
 # Docker layer caching still works! When requirements changes, this layer rebuilds
-RUN pip install --no-cache-dir -r requirements-prod.txt
+RUN pip install --no-cache-dir -r requirements-prod-cpu.txt
 
 # Copy source code (small)
 COPY src/ ./src/
