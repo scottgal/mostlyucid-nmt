@@ -1,0 +1,256 @@
+name: Build and Release Executables
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 3.2.0)'
+        required: false
+        default: 'dev'
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: mostlylucid-nmt.exe
+            asset_name: mostlylucid-nmt-windows-x64.exe
+          - os: ubuntu-latest
+            artifact_name: mostlylucid-nmt
+            asset_name: mostlylucid-nmt-linux-x64
+          - os: macos-latest
+            artifact_name: mostlylucid-nmt
+            asset_name: mostlylucid-nmt-macos-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Install UPX (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y upx
+
+      - name: Install UPX (Windows)
+        if: runner.os == 'Windows'
+        run: choco install upx -y
+        continue-on-error: true
+
+      - name: Install UPX (macOS)
+        if: runner.os == 'macOS'
+        run: brew install upx
+        continue-on-error: true
+
+      - name: Generate version string
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" =~ refs/tags/v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          elif [[ -n "${{ github.event.inputs.version }}" && "${{ github.event.inputs.version }}" != "dev" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="dev-$(date -u +%Y%m%d)"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
+
+      - name: Update version in source
+        shell: bash
+        run: |
+          # Create __init__.py with version if it doesn't exist
+          echo '__version__ = "${{ steps.version.outputs.version }}"' > src/__version__.py
+
+      - name: Build executable
+        run: pyinstaller mostlylucid_nmt.spec
+
+      - name: Test executable
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            ./dist/mostlylucid-nmt.exe --version || echo "Version check done"
+            ./dist/mostlylucid-nmt.exe --info || echo "Info check done"
+          else
+            ./dist/mostlylucid-nmt --version || echo "Version check done"
+            ./dist/mostlylucid-nmt --info || echo "Info check done"
+          fi
+
+      - name: Get executable size
+        id: size
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            SIZE=$(stat -c%s "dist/${{ matrix.artifact_name }}" 2>/dev/null || stat -f%z "dist/${{ matrix.artifact_name }}")
+          else
+            SIZE=$(stat -c%s "dist/${{ matrix.artifact_name }}" 2>/dev/null || stat -f%z "dist/${{ matrix.artifact_name }}")
+          fi
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "size_mb=${SIZE_MB}" >> $GITHUB_OUTPUT
+          echo "Executable size: ${SIZE_MB} MB"
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          mv "dist/${{ matrix.artifact_name }}" "dist/${{ matrix.asset_name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+          retention-days: 7
+
+      - name: Build summary
+        run: |
+          echo "### Build: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact:** ${{ matrix.asset_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Size:** ~${{ steps.size.outputs.size_mb }} MB" >> $GITHUB_STEP_SUMMARY
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f -ls
+
+      - name: Generate version string
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          for dir in */; do
+            for file in "$dir"*; do
+              if [ -f "$file" ]; then
+                sha256sum "$file" >> checksums.txt
+              fi
+            done
+          done
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: MostlyLucid-NMT v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          generate_release_notes: true
+          body: |
+            ## MostlyLucid-NMT v${{ steps.version.outputs.version }}
+
+            A FastAPI neural machine translation service with support for Opus-MT, mBART50, and M2M100 models.
+
+            ### Downloads
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | Windows | `mostlylucid-nmt-windows-x64.exe` | Windows x64 standalone executable |
+            | Linux | `mostlylucid-nmt-linux-x64` | Linux x64 standalone executable |
+            | macOS | `mostlylucid-nmt-macos-x64` | macOS x64 standalone executable |
+
+            ### Quick Start
+
+            ```bash
+            # Start the server
+            ./mostlylucid-nmt
+
+            # Or on Windows
+            mostlylucid-nmt.exe
+
+            # Check if ready
+            ./mostlylucid-nmt --check
+
+            # Translate text (requires running server)
+            ./mostlylucid-nmt --translate "Hello world" -s en -t de
+            ```
+
+            ### LLM CLI Tool Integration
+
+            The executable can be used as a translation tool for LLM CLI tools:
+
+            ```bash
+            # Start server in background
+            ./mostlylucid-nmt --background
+
+            # Translate with JSON output
+            ./mostlylucid-nmt --translate "Your text here" -s en -t de --json
+
+            # Check server status
+            ./mostlylucid-nmt --status
+            ```
+
+            ### Configuration
+
+            Set environment variables before running:
+
+            ```bash
+            export MODEL_FAMILY=opus-mt    # or mbart50, m2m100
+            export USE_GPU=true            # Enable GPU acceleration
+            export CHUNK_CACHE_ENABLED=1   # Enable translation caching
+            ```
+
+            ### Docker
+
+            Docker images are also available:
+            ```bash
+            docker pull scottgal/mostlylucid-nmt:cpu
+            docker pull scottgal/mostlylucid-nmt:gpu
+            ```
+
+            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for full documentation.
+          files: |
+            artifacts/mostlylucid-nmt-windows-x64.exe/*
+            artifacts/mostlylucid-nmt-linux-x64/*
+            artifacts/mostlylucid-nmt-macos-x64/*
+            artifacts/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "### Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY

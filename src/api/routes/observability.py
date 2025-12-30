@@ -67,6 +67,17 @@ async def cache_status():
 
 
 @router.get(
+    "/chunk_cache",
+    summary="Chunk Cache Status",
+    description="Returns LFU chunk translation cache statistics"
+)
+async def chunk_cache_status():
+    """Chunk cache status endpoint."""
+    from src.core.chunk_cache import get_chunk_cache_status
+    return get_chunk_cache_status()
+
+
+@router.get(
     "/model_name",
     response_model=ModelInfoResponse,
     summary="Model Name",

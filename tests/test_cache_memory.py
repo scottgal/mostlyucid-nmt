@@ -36,10 +36,12 @@ class TestMemoryMonitoring:
         if not PSUTIL_AVAILABLE:
             pytest.skip("psutil not available")
 
-        cache = LRUPipelineCache(capacity=5)
+        import logging
+        with caplog.at_level(logging.INFO, logger="app"):
+            cache = LRUPipelineCache(capacity=5)
 
-        # Should log system RAM
-        assert any("System RAM:" in record.message for record in caplog.records)
+            # Should log system RAM (message includes emoji prefix)
+            assert any("System RAM" in record.message for record in caplog.records)
 
     def test_system_memory_usage_returns_tuple(self, cache):
         """Test _get_system_memory_usage returns valid tuple."""
@@ -133,8 +135,8 @@ class TestMemoryBasedEviction:
 
         assert len(cache) == 3
 
-        # Mock critical RAM usage (95%)
-        with patch.object(cache, "_get_system_memory_usage", return_value=(95.0, 15.2, 16.0)):
+        # Mock critical RAM usage (92% - above 90% threshold but below 95% emergency)
+        with patch.object(cache, "_get_system_memory_usage", return_value=(92.0, 14.7, 16.0)):
             with patch("src.config.config.ENABLE_MEMORY_MONITOR", True):
                 with patch("src.config.config.MEMORY_CRITICAL_THRESHOLD", 90.0):
                     with patch("src.config.config.MEMORY_CHECK_INTERVAL", 1):
@@ -343,13 +345,17 @@ class TestHelperMethods:
         if not PSUTIL_AVAILABLE:
             pytest.skip("psutil not available")
 
+        from contextlib import contextmanager
+
+        @contextmanager
         def simulate_high_memory(ram_percent: float, vram_percent: float = 0.0):
             """Helper to simulate specific memory conditions."""
             with patch.object(cache, "_get_system_memory_usage", return_value=(ram_percent, ram_percent * 16 / 100, 16.0)):
                 if vram_percent > 0 and torch.cuda.is_available():
                     with patch.object(cache, "_get_gpu_memory_usage", return_value=(vram_percent, vram_percent * 8 / 100, 8.0)):
-                        return cache
-                return cache
+                        yield cache
+                else:
+                    yield cache
 
         # Test the helper
         cache.put("en->de", MockPipeline("en-de"))
@@ -395,29 +401,31 @@ class TestMemoryMonitoringIntegration:
         if not PSUTIL_AVAILABLE:
             pytest.skip("psutil not available")
 
-        cache = LRUPipelineCache(capacity=2)
+        import logging
+        with caplog.at_level(logging.INFO, logger="app"):
+            cache = LRUPipelineCache(capacity=2)
 
-        # Initial state should log memory
-        assert any("System RAM:" in record.message for record in caplog.records)
+            # Initial state should log memory (message includes emoji prefix)
+            assert any("System RAM" in record.message for record in caplog.records)
 
-        # Add models
-        cache.put("en->de", MockPipeline("en-de"))
-        cache.put("en->fr", MockPipeline("en-fr"))
+            # Add models
+            cache.put("en->de", MockPipeline("en-de"))
+            cache.put("en->fr", MockPipeline("en-fr"))
 
-        # Get status with memory
-        status = cache.get_status()
-        assert "system_memory" in status
-        assert status["size"] == 2
+            # Get status with memory
+            status = cache.get_status()
+            assert "system_memory" in status
+            assert status["size"] == 2
 
-        # Cache hit should work
-        result = cache.get("en->de")
-        assert result is not None
+            # Cache hit should work
+            result = cache.get("en->de")
+            assert result is not None
 
-        # Overflow should evict
-        cache.put("en->es", MockPipeline("en-es"))
-        assert len(cache) == 2  # Oldest evicted
+            # Overflow should evict
+            cache.put("en->es", MockPipeline("en-es"))
+            assert len(cache) == 2  # Oldest evicted
 
-        # Log status should show memory
-        caplog.clear()
-        cache.log_status()
-        assert any("System RAM:" in record.message for record in caplog.records)
+            # Log status should show memory (message includes emoji prefix)
+            caplog.clear()
+            cache.log_status()
+            assert any("System RAM" in record.message for record in caplog.records)

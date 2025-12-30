@@ -29,33 +29,45 @@ _maintenance_task_handle: asyncio.Task = None
 
 
 async def _maintenance_task():
-    """Periodic maintenance: CUDA cache clearing and idle model eviction."""
+    """Periodic maintenance: CUDA cache clearing, idle model eviction, and chunk cache TTL sweep."""
     # Determine minimum interval from configured values
     cuda_interval = config.CUDA_CACHE_CLEAR_INTERVAL_SEC
     idle_interval = config.IDLE_CHECK_INTERVAL
+    chunk_cache_interval = config.CHUNK_CACHE_CLEANUP_INTERVAL
 
-    # If both are disabled, don't run maintenance task
-    if cuda_interval <= 0 and config.MODEL_IDLE_TIMEOUT <= 0:
-        logger.info("Maintenance task disabled (CUDA_CACHE_CLEAR_INTERVAL_SEC=0 and MODEL_IDLE_TIMEOUT=0)")
+    # Check if any maintenance is needed
+    maintenance_needed = (
+        cuda_interval > 0 or
+        config.MODEL_IDLE_TIMEOUT > 0 or
+        (config.CHUNK_CACHE_ENABLED and config.CHUNK_CACHE_MAX_AGE > 0)
+    )
+
+    if not maintenance_needed:
+        logger.info("Maintenance task disabled (no periodic tasks configured)")
         return
 
-    # Use the smallest positive interval, or default to 60 seconds if one is enabled
-    if cuda_interval > 0 and config.MODEL_IDLE_TIMEOUT > 0:
-        interval = min(cuda_interval, idle_interval)
-    elif cuda_interval > 0:
-        interval = cuda_interval
-    else:
-        interval = idle_interval
+    # Calculate intervals
+    intervals = []
+    if cuda_interval > 0:
+        intervals.append(cuda_interval)
+    if config.MODEL_IDLE_TIMEOUT > 0:
+        intervals.append(idle_interval)
+    if config.CHUNK_CACHE_ENABLED and config.CHUNK_CACHE_MAX_AGE > 0:
+        intervals.append(chunk_cache_interval)
 
-    logger.info(f"Maintenance task started (interval: {interval}s, CUDA clearing: {cuda_interval > 0}, idle eviction: {config.MODEL_IDLE_TIMEOUT}s)")
+    interval = min(intervals) if intervals else 60
+
+    logger.info(f"Maintenance task started (interval: {interval}s, CUDA clearing: {cuda_interval > 0}, idle eviction: {config.MODEL_IDLE_TIMEOUT}s, chunk cache TTL: {config.CHUNK_CACHE_MAX_AGE}s)")
 
     cuda_counter = 0
     idle_counter = 0
+    chunk_cache_counter = 0
 
     while True:
         try:
             cuda_counter += interval
             idle_counter += interval
+            chunk_cache_counter += interval
 
             # CUDA cache clearing
             if cuda_interval > 0 and cuda_counter >= cuda_interval:
@@ -74,6 +86,19 @@ async def _maintenance_task():
                 except Exception as e:
                     logger.warning(f"maintenance: idle eviction error: {e}")
                 idle_counter = 0
+
+            # Chunk cache TTL sweep
+            if config.CHUNK_CACHE_ENABLED and config.CHUNK_CACHE_MAX_AGE > 0 and chunk_cache_counter >= chunk_cache_interval:
+                try:
+                    from src.core.chunk_cache import get_chunk_cache
+                    chunk_cache = get_chunk_cache()
+                    if chunk_cache:
+                        evicted = chunk_cache.evict_expired()
+                        if evicted and config.REQUEST_LOG:
+                            logger.debug(f"maintenance: chunk cache TTL sweep evicted {evicted} entries")
+                except Exception as e:
+                    logger.warning(f"maintenance: chunk cache TTL sweep error: {e}")
+                chunk_cache_counter = 0
 
         except Exception as e:
             logger.warning(f"maintenance error: {e}")
@@ -109,6 +134,12 @@ async def lifespan(app: FastAPI):
             logger.info(f"⏰ Idle model eviction enabled: {config.MODEL_IDLE_TIMEOUT}s timeout (check every {config.IDLE_CHECK_INTERVAL}s)")
         else:
             logger.info(f"⏰ Idle model eviction disabled (MODEL_IDLE_TIMEOUT=0)")
+
+        # Log chunk cache configuration
+        if config.CHUNK_CACHE_ENABLED:
+            logger.info(f"📦 Chunk cache enabled: capacity={config.CHUNK_CACHE_CAPACITY}, TTL={config.CHUNK_CACHE_MAX_AGE}s")
+        else:
+            logger.info(f"📦 Chunk cache disabled (CHUNK_CACHE_ENABLED=0)")
 
         # Preload models if requested
         if config.PRELOAD_MODELS:

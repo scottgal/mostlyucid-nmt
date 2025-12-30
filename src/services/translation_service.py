@@ -1,6 +1,6 @@
 """Translation service with robust error handling and processing pipeline."""
 
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
@@ -145,16 +145,22 @@ class TranslationService:
 
     def _translate_with_translator(
         self,
-        translator: any,
+        translator: Any,
         chunks: List[str],
-        eff_beam: int
+        eff_beam: int,
+        src: str = "",
+        tgt: str = "",
+        model_family: str = ""
     ) -> List[str]:
-        """Translate chunks using translator pipeline.
+        """Translate chunks using translator pipeline with LFU caching.
 
         Args:
             translator: Transformers pipeline
             chunks: List of text chunks to translate
             eff_beam: Effective beam size
+            src: Source language code (for cache key)
+            tgt: Target language code (for cache key)
+            model_family: Model family (for cache key)
 
         Returns:
             List of translated chunks
@@ -177,13 +183,55 @@ class TranslationService:
 
         logger.debug(f"[Masking] Masked {len(chunks)} chunks, found {sum(len(m) for m in mask_data)} symbol sequences")
 
-        out_chunks: List[str] = []
-        bs = max(1, config.EASYNMT_BATCH_SIZE)
+        # LFU chunk cache lookup
+        from src.core.chunk_cache import get_chunk_cache
+        chunk_cache = get_chunk_cache()
 
-        for i in range(0, len(masked_chunks), bs):
-            batch = masked_chunks[i:i + bs]
-            res = translator(batch, max_length=gen_max_len, num_beams=eff_beam, batch_size=len(batch))
-            out_chunks.extend([r.get("translation_text", "") for r in res])
+        out_chunks: List[str] = [""] * len(masked_chunks)  # Pre-allocate for correct ordering
+        miss_indices: List[int] = []
+        miss_chunks: List[str] = []
+
+        if chunk_cache and src and tgt:
+            # Build cache keys and batch lookup
+            cache_keys = [
+                (masked_text, src, tgt, model_family or config.MODEL_FAMILY, eff_beam)
+                for masked_text in masked_chunks
+            ]
+            cached_results = chunk_cache.get_batch(cache_keys)
+
+            # Separate hits and misses
+            for i in range(len(masked_chunks)):
+                if i in cached_results:
+                    out_chunks[i] = cached_results[i]
+                else:
+                    miss_indices.append(i)
+                    miss_chunks.append(masked_chunks[i])
+
+            if cached_results:
+                logger.debug(f"[ChunkCache] {len(cached_results)} hits, {len(miss_chunks)} misses")
+        else:
+            # Cache disabled or no lang info - translate all
+            miss_indices = list(range(len(masked_chunks)))
+            miss_chunks = masked_chunks
+
+        # Translate only cache misses
+        if miss_chunks:
+            translated_misses: List[str] = []
+            bs = max(1, config.EASYNMT_BATCH_SIZE)
+
+            for i in range(0, len(miss_chunks), bs):
+                batch = miss_chunks[i:i + bs]
+                res = translator(batch, max_length=gen_max_len, num_beams=eff_beam, batch_size=len(batch))
+                translated_misses.extend([r.get("translation_text", "") for r in res])
+
+            # Store translations in cache and reassemble results
+            for miss_idx, translation in zip(miss_indices, translated_misses):
+                out_chunks[miss_idx] = translation
+
+                # Cache the result
+                if chunk_cache and src and tgt:
+                    cache_key = (masked_chunks[miss_idx], src, tgt, model_family or config.MODEL_FAMILY, eff_beam)
+                    chunk_cache.put(cache_key, translation)
 
         # Unmask symbols in translated output
         final_chunks: List[str] = []
@@ -237,7 +285,7 @@ class TranslationService:
                 logger.debug(f"[Translate] Split into {len(sents)} sentences")
                 chunks = chunk_sentences(sents, config.MAX_CHUNK_CHARS)
                 logger.debug(f"[Translate] Created {len(chunks)} chunks")
-                out = self._translate_with_translator(translator, chunks, eff_beam)
+                out = self._translate_with_translator(translator, chunks, eff_beam, src, tgt, preferred_family)
                 logger.debug(f"[Translate] Translation output: {out[:2] if len(out) > 2 else out}")
                 combined = config.JOIN_SENTENCES_WITH.join(out)
                 combined = remove_repeating_new_symbols(txt, combined)
@@ -292,10 +340,10 @@ class TranslationService:
                     chunks = chunk_sentences(sents, config.MAX_CHUNK_CHARS)
 
                     # First hop: src -> pivot
-                    mid = self._translate_with_translator(trans_src_pivot, chunks, eff_beam)
+                    mid = self._translate_with_translator(trans_src_pivot, chunks, eff_beam, src, pivot_lang)
 
                     # Second hop: pivot -> tgt
-                    final = self._translate_with_translator(trans_pivot_tgt, mid, eff_beam)
+                    final = self._translate_with_translator(trans_pivot_tgt, mid, eff_beam, pivot_lang, tgt)
 
                     combined = config.JOIN_SENTENCES_WITH.join(final)
                     combined = remove_repeating_new_symbols(txt, combined)
@@ -330,7 +378,7 @@ class TranslationService:
                         if perform_sentence_splitting:
                             sents = split_sentences(txt)
                             chunks = chunk_sentences(sents, config.MAX_CHUNK_CHARS)
-                            translated_chunks = self._translate_with_translator(translator_fallback, chunks, eff_beam)
+                            translated_chunks = self._translate_with_translator(translator_fallback, chunks, eff_beam, src, tgt, fallback_family)
                             combined = config.JOIN_SENTENCES_WITH.join(translated_chunks)
                             combined = remove_repeating_new_symbols(txt, combined)
                             logger.info(f"[Fallback] Success with {fallback_family}: '{combined[:100]}'")

@@ -15,7 +15,10 @@
       "Bash(curl:*)",
       "Bash(docker stop:*)",
       "Bash(cd:*)",
-      "Bash(powershell -Command \"docker build -f E:/source/mostlylucid-nmt/Dockerfile.gpu.min -t mostlylucid-nmt:gpu-test E:/source/mostlylucid-nmt/\")"
+      "Bash(powershell -Command \"docker build -f E:/source/mostlylucid-nmt/Dockerfile.gpu.min -t mostlylucid-nmt:gpu-test E:/source/mostlylucid-nmt/\")",
+      "Bash(python:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []

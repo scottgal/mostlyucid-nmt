@@ -26,6 +26,7 @@ mostlylucid-nmt/
 │   ├── core/                   # Core infrastructure
 │   │   ├── logging.py          # Structured logging setup
 │   │   ├── cache.py            # LRU pipeline cache with GPU memory management
+│   │   ├── chunk_cache.py      # LFU chunk translation cache
 │   │   └── device.py           # Device selection and management
 │   ├── services/               # Business logic layer
 │   │   ├── model_manager.py    # Model loading and caching (supports opus-mt, mbart50, m2m100)
@@ -49,6 +50,7 @@ mostlylucid-nmt/
 │   ├── test_symbol_masking.py
 │   ├── test_markdown_sanitizer.py
 │   ├── test_cache.py
+│   ├── test_chunk_cache.py     # LFU chunk cache tests
 │   ├── test_config.py
 │   └── test_api_integration.py
 ├── test_api_comprehensive.py   # HTTP API test suite (Python, comprehensive)
@@ -92,9 +94,13 @@ Chunking (chunk_sentences)
   ↓
 Symbol masking (src/utils/symbol_masking.py:mask_symbols)
   ↓
+LFU chunk cache lookup (src/core/chunk_cache.py)
+  ↓ (cache misses only)
 Get model from cache (src/services/model_manager.py)
   ↓
 Translate batches (EASYNMT_BATCH_SIZE)
+  ↓
+Store in chunk cache
   ↓
 Unmask symbols (unmask_symbols)
   ↓
@@ -117,6 +123,24 @@ Return translations
 - Automatic eviction: Moves evicted pipeline to CPU, calls `torch.cuda.empty_cache()`
 - Thread-safe: Synchronous operations within async thread pool executor
 - Key format: `"{src}->{tgt}"` (e.g., `"en->de"`)
+
+### Chunk Translation Cache (src/core/chunk_cache.py)
+
+**LFUChunkCache** caches translated text chunks to avoid redundant model inference:
+- LFU eviction with LRU tiebreaker for same frequency
+- Cache key: `(masked_text, src_lang, tgt_lang, model_family, beam_size)`
+- TTL-based expiration with periodic cleanup
+- Batch lookup for efficient cache checking
+
+**Configuration:**
+- `CHUNK_CACHE_ENABLED`: Enable/disable (default: `1`)
+- `CHUNK_CACHE_CAPACITY`: Max entries (default: `10000`, ~25MB)
+- `CHUNK_CACHE_MAX_AGE`: TTL in seconds (default: `3600`)
+- `CHUNK_CACHE_MAX_KEY_LENGTH`: Skip caching long chunks (default: `1000`)
+
+**Integration:** Cache is checked in `_translate_with_translator()` after symbol masking. Only cache misses are sent to the model.
+
+**Status endpoint:** `GET /chunk_cache` returns hit rate, frequency distribution, memory usage.
 
 ## Key Modules
 

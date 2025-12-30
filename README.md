@@ -143,7 +143,46 @@ docker run --gpus all scottgal/mostlylucid-nmt:gpu
 
 ## Quick Start
 
-### Using Pre-built Images (Recommended)
+### Standalone Executable (No Python Required)
+
+Download pre-built executables from [GitHub Releases](https://github.com/scottgal/mostlylucid-nmt/releases):
+
+| Platform | File |
+|----------|------|
+| Windows | `mostlylucid-nmt-windows-x64.exe` |
+| Linux | `mostlylucid-nmt-linux-x64` |
+| macOS | `mostlylucid-nmt-macos-x64` |
+
+```bash
+# Start the translation server
+./mostlylucid-nmt                  # Linux/Mac
+mostlylucid-nmt.exe                # Windows
+
+# Check if server is ready
+./mostlylucid-nmt --check
+
+# Translate text (requires running server)
+./mostlylucid-nmt --translate "Hello world" -s en -t de
+
+# Get server status (JSON)
+./mostlylucid-nmt --status
+```
+
+**LLM CLI Tool Integration:**
+```bash
+# Start server in background mode
+./mostlylucid-nmt --background
+
+# Translate with JSON output (for piping to other tools)
+./mostlylucid-nmt --translate "Your text" -s en -t de --json
+
+# Show configuration
+./mostlylucid-nmt --info
+```
+
+Models are downloaded automatically on first use (~300MB for Opus-MT, ~2.4GB for mBART50/M2M100).
+
+### Using Pre-built Docker Images (Recommended)
 
 **CPU:**
 ```bash
@@ -277,7 +316,8 @@ Returns model name, family, languages used, chunks processed, etc.
 - `GET /discover/all` - All families in parallel
 - `GET /healthz` - Health check
 - `GET /readyz` - Readiness check
-- `GET /cache` - Cache status and queue info
+- `GET /cache` - Model cache status and queue info
+- `GET /chunk_cache` - Chunk translation cache statistics (LFU cache)
 
 ---
 
@@ -306,6 +346,22 @@ Key environment variables (defaults in parentheses):
 - `ENABLE_MEMORY_MONITOR=1` (`1`) - Auto-evict on high memory
 - `MEMORY_CRITICAL_THRESHOLD=90.0` (`90.0`) - Auto-evict at 90% RAM
 - `GPU_MEMORY_CRITICAL_THRESHOLD=90.0` (`90.0`) - Auto-evict at 90% VRAM
+
+### Chunk Translation Cache (LFU)
+Caches translated text chunks to avoid redundant model inference for repeated content. Uses LFU (Least Frequently Used) eviction with LRU tiebreaker.
+
+- `CHUNK_CACHE_ENABLED=1` (`1`) - Enable/disable chunk caching
+- `CHUNK_CACHE_CAPACITY=10000` (`10000`) - Maximum cached entries (~25MB at capacity)
+- `CHUNK_CACHE_MAX_AGE=3600` (`3600`) - Entry TTL in seconds (0 = no expiration)
+- `CHUNK_CACHE_MAX_KEY_LENGTH=1000` (`1000`) - Skip caching chunks longer than this
+- `CHUNK_CACHE_CLEANUP_INTERVAL=300` (`300`) - Seconds between TTL sweeps
+
+**When to disable:**
+- If translations must reflect model updates immediately
+- Memory-constrained environments
+- Testing/debugging translation output
+
+**Monitor via:** `GET /chunk_cache` returns hit rate, frequency distribution, memory usage.
 
 ### Queueing & Timeouts
 - `ENABLE_QUEUE=1` (`1`) - Enable request queueing
@@ -391,6 +447,32 @@ docker run -p 8000:8000 \
 ---
 
 ## Building from Source
+
+### Standalone Executable
+
+Build a self-contained executable (no Python required to run):
+
+```bash
+# Install PyInstaller
+pip install pyinstaller
+
+# Windows PowerShell
+.\build_exe.ps1
+
+# Linux/Mac
+chmod +x build_exe.sh
+./build_exe.sh
+```
+
+The executable will be created in `dist/mostlylucid-nmt` (~50-100MB depending on platform).
+
+**Options:**
+```bash
+.\build_exe.ps1 -Clean    # Clean build
+.\build_exe.ps1 -NoUpx    # Skip UPX compression (faster build)
+```
+
+### Docker Images
 
 **Quick build all variants:**
 ```bash

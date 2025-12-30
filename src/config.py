@@ -178,6 +178,13 @@ class Config:
         p.strip() for p in os.getenv("MARKDOWN_PROBLEMATIC_PAIRS", "").split(",") if p.strip()
     ]  # e.g., "en->ar,en->he"
 
+    # Chunk translation cache (LFU) - caches translated chunks to avoid repeated model inference
+    CHUNK_CACHE_ENABLED: bool = os.getenv("CHUNK_CACHE_ENABLED", "1").lower() in ("1", "true", "yes")
+    CHUNK_CACHE_CAPACITY: int = int(os.getenv("CHUNK_CACHE_CAPACITY", "10000"))  # Max entries (~25MB at capacity)
+    CHUNK_CACHE_MAX_AGE: int = int(os.getenv("CHUNK_CACHE_MAX_AGE", "3600"))  # TTL in seconds (0 = no expiration)
+    CHUNK_CACHE_MAX_KEY_LENGTH: int = int(os.getenv("CHUNK_CACHE_MAX_KEY_LENGTH", "1000"))  # Skip caching chunks longer than this
+    CHUNK_CACHE_CLEANUP_INTERVAL: int = int(os.getenv("CHUNK_CACHE_CLEANUP_INTERVAL", "300"))  # Seconds between TTL sweeps
+
     @classmethod
     def get_supported_langs(cls) -> List[str]:
         """Get supported language codes for current model family.
