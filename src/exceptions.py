@@ -62,3 +62,20 @@ class OutOfMemoryError(TranslatorException):
             msg = f"Out of memory: RAM at {ram_pct:.1f}%. All models evicted. Cannot load new models."
 
         super().__init__(msg)
+
+
+class ModelConversionError(TranslatorException):
+    """Raised when CTranslate2 model conversion fails."""
+
+    def __init__(self, model_name: str, reason: str):
+        self.model_name = model_name
+        self.reason = reason
+        super().__init__(f"Failed to convert model {model_name} to CTranslate2: {reason}")
+
+
+class PreconvertedModelNotFoundError(TranslatorException):
+    """Raised when pre-converted CTranslate2 model is not available."""
+
+    def __init__(self, model_name: str):
+        self.model_name = model_name
+        super().__init__(f"Pre-converted CTranslate2 model not found: {model_name}")

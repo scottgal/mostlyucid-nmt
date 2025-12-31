@@ -3,7 +3,14 @@
 import os
 import json
 from typing import Optional, Dict, Any, List
-import torch
+
+# Torch is optional - only needed for transformers backend
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None  # type: ignore
+    TORCH_AVAILABLE = False
 
 
 class Config:
@@ -185,6 +192,23 @@ class Config:
     CHUNK_CACHE_MAX_KEY_LENGTH: int = int(os.getenv("CHUNK_CACHE_MAX_KEY_LENGTH", "1000"))  # Skip caching chunks longer than this
     CHUNK_CACHE_CLEANUP_INTERVAL: int = int(os.getenv("CHUNK_CACHE_CLEANUP_INTERVAL", "300"))  # Seconds between TTL sweeps
 
+    # CTranslate2 configuration
+    # Backend selection: "ct2" (CTranslate2, recommended) or "transformers" (PyTorch, legacy)
+    TRANSLATION_BACKEND: str = os.getenv("TRANSLATION_BACKEND", "ct2").lower()
+
+    # CT2 quantization: "default", "float16", "int8", "int8_float16"
+    CT2_QUANTIZATION: str = os.getenv("CT2_QUANTIZATION", "default")
+
+    # CT2 compute type: "auto", "float32", "float16", "int8", "int8_float16"
+    CT2_COMPUTE_TYPE: str = os.getenv("CT2_COMPUTE_TYPE", "auto")
+
+    # CT2 threading (for CPU inference)
+    CT2_INTER_THREADS: int = int(os.getenv("CT2_INTER_THREADS", "1"))  # Number of parallel translations
+    CT2_INTRA_THREADS: int = int(os.getenv("CT2_INTRA_THREADS", "4"))  # Threads per translation
+
+    # Prefer pre-converted CT2 models from HuggingFace when available
+    CT2_PREFER_PRECONVERTED: bool = os.getenv("CT2_PREFER_PRECONVERTED", "1").lower() in ("1", "true", "yes")
+
     @classmethod
     def get_supported_langs(cls) -> List[str]:
         """Get supported language codes for current model family.
@@ -217,8 +241,8 @@ class Config:
                 continue
 
             if k == "torch_dtype":
-                # Map strings to torch dtype
-                if isinstance(v, str):
+                # Map strings to torch dtype (only if torch is available)
+                if isinstance(v, str) and TORCH_AVAILABLE:
                     vs = v.lower()
                     if vs in ("fp16", "float16", "torch.float16"):
                         out[k] = torch.float16
@@ -243,10 +267,24 @@ class Config:
         Returns:
             -1 for CPU, 0+ for CUDA device index
         """
+        # Check CUDA availability (works with torch or ctranslate2)
+        cuda_available = False
+        if TORCH_AVAILABLE:
+            cuda_available = torch.cuda.is_available()
+        else:
+            # Try ctranslate2's CUDA detection
+            try:
+                import ctranslate2
+                # get_supported_compute_types requires device argument in v4+
+                cuda_types = ctranslate2.get_supported_compute_types("cuda")
+                cuda_available = len(cuda_types) > 0
+            except (ImportError, Exception):
+                cuda_available = False
+
         dev = cls.DEVICE_ENV
         if dev and dev != "auto":
             if dev.startswith("cuda"):
-                if not torch.cuda.is_available():
+                if not cuda_available:
                     return -1
                 if ":" in dev:
                     _, idx = dev.split(":", 1)
@@ -259,11 +297,11 @@ class Config:
 
         # Fallback by USE_GPU
         if cls.USE_GPU in ("1", "true", "yes"):  # force GPU if available
-            return 0 if torch.cuda.is_available() else -1
+            return 0 if cuda_available else -1
         if cls.USE_GPU in ("0", "false", "no"):
             return -1
         # auto
-        return 0 if torch.cuda.is_available() else -1
+        return 0 if cuda_available else -1
 
     @classmethod
     def get_max_inflight_translations(cls, device_index: int) -> int:

@@ -1,7 +1,6 @@
 """Translation model loading and caching."""
 
 from typing import Any, Optional
-from transformers import pipeline
 import os
 import sys
 
@@ -12,6 +11,22 @@ from src.core.logging import logger
 from src.core.download_progress import setup_hf_progress, show_download_banner, show_download_complete
 from src.core.pi_optimizations import pi_optimizer
 from src.exceptions import ModelLoadError
+
+# Import backend-specific modules
+if config.TRANSLATION_BACKEND == "ct2":
+    from src.core.ct2_loader import get_ct2_loader
+    from src.core.ct2_wrapper import CT2TranslatorWrapper
+    CT2_AVAILABLE = True
+else:
+    CT2_AVAILABLE = False
+
+# Transformers pipeline (only import if using transformers backend or as fallback)
+try:
+    from transformers import pipeline as transformers_pipeline
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    transformers_pipeline = None  # type: ignore
+    TRANSFORMERS_AVAILABLE = False
 
 # Enable beautiful download progress bars
 setup_hf_progress()
@@ -100,7 +115,7 @@ class ModelManager:
                             Uses config.MODEL_FAMILY if None.
 
         Returns:
-            Transformers pipeline for translation
+            Translator (CT2TranslatorWrapper or transformers pipeline)
 
         Raises:
             ModelLoadError: If model loading fails for all families
@@ -116,6 +131,46 @@ class ModelManager:
             return cached
 
         # Determine which model family to use
+        families_to_try = self._get_families_to_try(src, tgt, preferred_family)
+
+        if not families_to_try:
+            # No family supports this pair
+            logger.error(f"No families support {src}->{tgt}. Checked: opus-mt={self._is_pair_supported(src, tgt, 'opus-mt')}, mbart50={self._is_pair_supported(src, tgt, 'mbart50')}, m2m100={self._is_pair_supported(src, tgt, 'm2m100')}")
+            raise ModelLoadError(
+                f"{src}->{tgt}",
+                ValueError(f"Language pair {src}->{tgt} not supported by any model family")
+            )
+
+        # Try each family in order
+        logger.info(f"Trying families for {src}->{tgt}: {families_to_try} (backend: {config.TRANSLATION_BACKEND})")
+        last_error = None
+
+        for family in families_to_try:
+            try:
+                # Use CT2 backend if available
+                if CT2_AVAILABLE and config.TRANSLATION_BACKEND == "ct2":
+                    pl = self._load_ct2_translator(src, tgt, family, key)
+                elif TRANSFORMERS_AVAILABLE:
+                    pl = self._load_transformers_pipeline(src, tgt, family, key)
+                else:
+                    raise ModelLoadError(
+                        f"{src}->{tgt}",
+                        ImportError("No translation backend available. Install ctranslate2 or transformers.")
+                    )
+
+                return pl
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Failed to load model family '{family}' for {src}->{tgt}: {e}")
+                continue
+
+        # All families failed
+        logger.error(f"Failed to load model for {src}->{tgt} from any family")
+        raise ModelLoadError(f"{src}->{tgt}", last_error or Exception("No families to try"))
+
+    def _get_families_to_try(self, src: str, tgt: str, preferred_family: Optional[str]) -> list:
+        """Determine which model families to try for a language pair."""
         families_to_try = []
 
         logger.info(f"[ModelManager] AUTO_MODEL_FALLBACK={config.AUTO_MODEL_FALLBACK}, preferred_family={preferred_family}")
@@ -123,11 +178,9 @@ class ModelManager:
         if preferred_family:
             # User requested specific family - try it first
             logger.info(f"[ModelManager] User requested family: {preferred_family}")
-            families_to_try.append(preferred_family)  # Always try preferred first
+            families_to_try.append(preferred_family)
 
             # If AUTO_MODEL_FALLBACK enabled, add fallback families too
-            # This allows falling back even if preferred family "should" support the pair
-            # but the actual model doesn't exist (e.g., Helsinki-NLP/opus-mt-en-bn)
             if config.AUTO_MODEL_FALLBACK:
                 logger.info(f"[ModelManager] AUTO_MODEL_FALLBACK enabled, adding fallback families after {preferred_family}")
                 fallback_families = [f.strip() for f in config.MODEL_FALLBACK_ORDER.split(",") if f.strip()]
@@ -140,7 +193,6 @@ class ModelManager:
             logger.info(f"[ModelManager] No preferred family, using AUTO_MODEL_FALLBACK")
             fallback_families = [f.strip() for f in config.MODEL_FALLBACK_ORDER.split(",") if f.strip()]
             logger.info(f"[ModelManager] Fallback order: {fallback_families}")
-            # Filter to only supported families for this pair
             for family in fallback_families:
                 supported = self._is_pair_supported(src, tgt, family)
                 logger.info(f"[ModelManager] _is_pair_supported({src}, {tgt}, {family}) = {supported}")
@@ -151,111 +203,142 @@ class ModelManager:
             logger.info(f"[ModelManager] AUTO_MODEL_FALLBACK disabled, using only {config.MODEL_FAMILY}")
             families_to_try = [config.MODEL_FAMILY]
 
-        if not families_to_try:
-            # No family supports this pair
-            logger.error(f"No families support {src}->{tgt}. Checked: opus-mt={self._is_pair_supported(src, tgt, 'opus-mt')}, mbart50={self._is_pair_supported(src, tgt, 'mbart50')}, m2m100={self._is_pair_supported(src, tgt, 'm2m100')}")
-            raise ModelLoadError(
-                f"{src}->{tgt}",
-                ValueError(f"Language pair {src}->{tgt} not supported by any model family")
-            )
+        return families_to_try
 
-        # Try each family in order
-        logger.info(f"Trying families for {src}->{tgt}: {families_to_try}")
-        last_error = None
-        for family in families_to_try:
-            try:
-                model_name, src_lang, tgt_lang, family_used = self._get_model_name_and_langs(src, tgt, family)
+    def _load_ct2_translator(self, src: str, tgt: str, family: str, cache_key: str) -> Any:
+        """Load a CTranslate2 translator for a language pair.
 
-                if family != config.MODEL_FAMILY:
-                    logger.info(f"Using fallback model family '{family}' for {src}->{tgt} (primary '{config.MODEL_FAMILY}' not available)")
+        Args:
+            src: Source language code
+            tgt: Target language code
+            family: Model family (opus-mt, mbart50, m2m100)
+            cache_key: Cache key for storing the translator
 
-                # Show nice loading message with download size
-                logger.info(f"Loading translation model: {model_name} ({src}->{tgt})")
+        Returns:
+            CT2TranslatorWrapper instance
+        """
+        model_name, src_lang, tgt_lang, family_used = self._get_model_name_and_langs(src, tgt, family)
 
-                # Determine device name for logging
-                device_name = "CPU" if device_manager.device_index == -1 else f"GPU (cuda:{device_manager.device_index})"
-                logger.info(f"[ModelManager] Loading {family} model on {device_name}")
+        if family != config.MODEL_FAMILY:
+            logger.info(f"Using fallback model family '{family}' for {src}->{tgt}")
 
-                # Show download banner with size information
-                show_download_banner(model_name, src=src, tgt=tgt, family=family, device=device_name)
+        # Determine device
+        device = "cuda" if device_manager.device_index >= 0 else "cpu"
+        device_name = "CPU" if device == "cpu" else f"GPU (cuda:{device_manager.device_index})"
 
-                if config.REQUEST_LOG:
-                    logger.debug(f"Pipeline cache miss: {key}, loading model {model_name} (family: {family})")
+        logger.info(f"Loading CT2 model: {model_name} ({src}->{tgt}) on {device_name}")
+        show_download_banner(model_name, src=src, tgt=tgt, family=family, device=device_name)
 
-                # Build pipeline kwargs
-                # Note: cache_dir is NOT valid for pipeline(), only for model loading
-                # Remove cache_dir from pipeline kwargs (transformers uses default HF cache)
-                filtered_kwargs = {k: v for k, v in self.pipeline_kwargs.items() if k != "cache_dir"}
+        # Get CT2 model path (handles download/conversion)
+        ct2_loader = get_ct2_loader()
+        model_path, tokenizer_name = ct2_loader.get_model_path(src, tgt, family)
 
-                # Get Pi-specific optimizations
-                pi_kwargs = pi_optimizer.get_pipeline_kwargs()
-                model_kwargs = pi_optimizer.get_model_loading_kwargs()
+        # Create CT2 wrapper
+        pl = CT2TranslatorWrapper(
+            model_path=str(model_path),
+            tokenizer_name=tokenizer_name,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            device=device,
+            device_index=device_manager.device_index if device_manager.device_index >= 0 else 0,
+            family=family_used,
+        )
 
-                pipeline_kwargs = {
-                    "model": model_name,
-                    "device": device_manager.device_index,
-                    "model_kwargs": model_kwargs,  # Pass optimizations to model loading
-                    **filtered_kwargs,
-                    **pi_kwargs,  # Pi optimizations override defaults
-                }
+        # Cache the translator
+        actual_key = f"{src}->{tgt}:{family}"
+        self.cache.put(actual_key, pl)
 
-                # If running a prepacked image with preloaded models, prefer the on-disk snapshot
-                # even when an external MODEL_CACHE_DIR is configured. This allows overlay behavior:
-                # preloaded models are used, while new downloads go to the external cache.
-                try:
-                    preloaded_root = os.getenv("PRELOADED_MODELS_DIR", "/app/models")
-                    if family == "opus-mt":
-                        preloaded_path = os.path.join(preloaded_root, model_name.replace("/", "--"))
-                        if os.path.isdir(preloaded_path):
-                            pipeline_kwargs["model"] = preloaded_path
-                            if config.REQUEST_LOG:
-                                logger.info(f"Using preloaded model from disk: {preloaded_path}")
-                except Exception:
-                    # Non-fatal; fall back to standard hub resolution
-                    pass
+        if actual_key != cache_key:
+            self.cache.put(cache_key, pl)
+            logger.debug(f"[ModelManager] Cached model under both {actual_key} and {cache_key}")
 
-                # For mBART50 and M2M100, we need to specify src_lang and tgt_lang
-                if family in ("mbart50", "m2m100"):
-                    pipeline_kwargs["src_lang"] = src_lang
-                    pipeline_kwargs["tgt_lang"] = tgt_lang
+        show_download_complete(model_name, src=src, tgt=tgt)
+        logger.info(f"Successfully loaded CT2 model: {model_name} ({src}->{tgt}) using family '{family}' on {device_name}")
 
-                pl = pipeline("translation", **pipeline_kwargs)
+        return pl
 
-                # Apply Pi-specific post-load optimizations
-                if hasattr(pl, 'model'):
-                    pi_optimizer.optimize_after_model_load(pl.model)
+    def _load_transformers_pipeline(self, src: str, tgt: str, family: str, cache_key: str) -> Any:
+        """Load a transformers pipeline for a language pair (legacy backend).
 
-                # Store in cache with ACTUAL family used, not requested family
-                # This ensures multilingual models can be reused across different requests
-                actual_key = f"{src}->{tgt}:{family}"
-                self.cache.put(actual_key, pl)
+        Args:
+            src: Source language code
+            tgt: Target language code
+            family: Model family (opus-mt, mbart50, m2m100)
+            cache_key: Cache key for storing the pipeline
 
-                # Also store under requested family key if different (for cache hits next time)
-                if actual_key != key:
-                    self.cache.put(key, pl)
-                    logger.debug(f"[ModelManager] Cached model under both {actual_key} and {key}")
+        Returns:
+            Transformers pipeline instance
+        """
+        model_name, src_lang, tgt_lang, family_used = self._get_model_name_and_langs(src, tgt, family)
 
-                # Confirm device placement
-                model_device = getattr(pl.model, 'device', None)
-                if model_device:
-                    logger.info(f"[ModelManager] Model loaded on device: {model_device}")
-                else:
-                    logger.info(f"[ModelManager] Model loaded (device: {device_name})")
+        if family != config.MODEL_FAMILY:
+            logger.info(f"Using fallback model family '{family}' for {src}->{tgt}")
 
-                # Show completion banner
-                show_download_complete(model_name, src=src, tgt=tgt)
+        device_name = "CPU" if device_manager.device_index == -1 else f"GPU (cuda:{device_manager.device_index})"
+        logger.info(f"Loading transformers model: {model_name} ({src}->{tgt}) on {device_name}")
 
-                logger.info(f"Successfully loaded model: {model_name} ({src}->{tgt}) using family '{family}' on {device_name}")
-                return pl
+        show_download_banner(model_name, src=src, tgt=tgt, family=family, device=device_name)
 
-            except Exception as e:
-                last_error = e
-                logger.warning(f"Failed to load model family '{family}' for {src}->{tgt}: {e}")
-                continue
+        if config.REQUEST_LOG:
+            logger.debug(f"Pipeline cache miss: {cache_key}, loading model {model_name} (family: {family})")
 
-        # All families failed
-        logger.error(f"Failed to load model for {src}->{tgt} from any family")
-        raise ModelLoadError(f"{src}->{tgt}", last_error or Exception("No families to try"))
+        # Build pipeline kwargs
+        filtered_kwargs = {k: v for k, v in self.pipeline_kwargs.items() if k != "cache_dir"}
+
+        # Get Pi-specific optimizations
+        pi_kwargs = pi_optimizer.get_pipeline_kwargs()
+        model_kwargs = pi_optimizer.get_model_loading_kwargs()
+
+        pipeline_kwargs = {
+            "model": model_name,
+            "device": device_manager.device_index,
+            "model_kwargs": model_kwargs,
+            **filtered_kwargs,
+            **pi_kwargs,
+        }
+
+        # Check for preloaded models
+        try:
+            preloaded_root = os.getenv("PRELOADED_MODELS_DIR", "/app/models")
+            if family == "opus-mt":
+                preloaded_path = os.path.join(preloaded_root, model_name.replace("/", "--"))
+                if os.path.isdir(preloaded_path):
+                    pipeline_kwargs["model"] = preloaded_path
+                    if config.REQUEST_LOG:
+                        logger.info(f"Using preloaded model from disk: {preloaded_path}")
+        except Exception:
+            pass
+
+        # For multilingual models, add language params
+        if family in ("mbart50", "m2m100"):
+            pipeline_kwargs["src_lang"] = src_lang
+            pipeline_kwargs["tgt_lang"] = tgt_lang
+
+        pl = transformers_pipeline("translation", **pipeline_kwargs)
+
+        # Apply Pi-specific post-load optimizations
+        if hasattr(pl, 'model'):
+            pi_optimizer.optimize_after_model_load(pl.model)
+
+        # Cache the pipeline
+        actual_key = f"{src}->{tgt}:{family}"
+        self.cache.put(actual_key, pl)
+
+        if actual_key != cache_key:
+            self.cache.put(cache_key, pl)
+            logger.debug(f"[ModelManager] Cached model under both {actual_key} and {cache_key}")
+
+        # Confirm device placement
+        model_device = getattr(pl.model, 'device', None)
+        if model_device:
+            logger.info(f"[ModelManager] Model loaded on device: {model_device}")
+        else:
+            logger.info(f"[ModelManager] Model loaded (device: {device_name})")
+
+        show_download_complete(model_name, src=src, tgt=tgt)
+        logger.info(f"Successfully loaded transformers model: {model_name} ({src}->{tgt}) using family '{family}' on {device_name}")
+
+        return pl
 
     def preload_models(self, pairs: str) -> None:
         """Preload translation models at startup.

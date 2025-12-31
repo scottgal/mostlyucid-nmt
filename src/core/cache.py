@@ -3,7 +3,14 @@
 from collections import OrderedDict
 from typing import Any, Optional, Tuple, List
 import time
-import torch
+
+# Torch is optional - only needed for transformers backend
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None  # type: ignore
+    TORCH_AVAILABLE = False
 
 try:
     import psutil
@@ -12,6 +19,29 @@ except ImportError:
     PSUTIL_AVAILABLE = False
 
 from src.core.logging import logger
+
+
+def _cuda_available() -> bool:
+    """Check if CUDA is available (works with or without torch)."""
+    if TORCH_AVAILABLE:
+        return torch.cuda.is_available()
+    # Try ctranslate2's detection
+    try:
+        import ctranslate2
+        # get_supported_compute_types requires device argument in v4+
+        cuda_types = ctranslate2.get_supported_compute_types("cuda")
+        return len(cuda_types) > 0
+    except (ImportError, Exception):
+        return False
+
+
+def _clear_cuda_cache() -> None:
+    """Clear CUDA cache if available."""
+    if TORCH_AVAILABLE and torch.cuda.is_available():
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
 
 
 class LRUPipelineCache(OrderedDict):
@@ -49,7 +79,7 @@ class LRUPipelineCache(OrderedDict):
         ram_pct, ram_used_gb, ram_total_gb = self._get_system_memory_usage()
         logger.info(f"💾 System RAM: {ram_used_gb:.1f}GB / {ram_total_gb:.1f}GB ({ram_pct:.1f}%)")
 
-        if torch.cuda.is_available():
+        if _cuda_available():
             gpu_pct, gpu_used_gb, gpu_total_gb = self._get_gpu_memory_usage()
             logger.info(f"🎮 GPU VRAM: {gpu_used_gb:.1f}GB / {gpu_total_gb:.1f}GB ({gpu_pct:.1f}%)")
 
@@ -74,15 +104,11 @@ class LRUPipelineCache(OrderedDict):
         Returns:
             Tuple of (percentage, used_gb, total_gb)
         """
-        if not torch.cuda.is_available():
+        if not _cuda_available():
             return (0.0, 0.0, 0.0)
 
         try:
-            # Get memory info for device 0 (primary GPU)
-            mem_allocated = torch.cuda.memory_allocated(0)
-            mem_reserved = torch.cuda.memory_reserved(0)
-
-            # Use nvidia-smi via pynvml if available, otherwise estimate
+            # Use nvidia-smi via pynvml if available
             try:
                 import pynvml
                 pynvml.nvmlInit()
@@ -94,12 +120,17 @@ class LRUPipelineCache(OrderedDict):
                 pynvml.nvmlShutdown()
                 return (percentage, used_gb, total_gb)
             except (ImportError, Exception):
-                # Fallback: estimate from PyTorch
-                # Note: PyTorch only tracks its own allocations, not total GPU usage
+                pass
+
+            # Fallback: estimate from PyTorch if available
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                mem_reserved = torch.cuda.memory_reserved(0)
                 total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
                 used_gb = mem_reserved / (1024**3)
                 percentage = (mem_reserved / torch.cuda.get_device_properties(0).total_memory) * 100
                 return (percentage, used_gb, total_gb)
+
+            return (0.0, 0.0, 0.0)
         except Exception as e:
             logger.debug(f"Error getting GPU memory: {e}")
             return (0.0, 0.0, 0.0)
@@ -145,7 +176,7 @@ class LRUPipelineCache(OrderedDict):
             logger.warning(f"⚠️  High RAM usage: {ram_pct:.1f}% ({ram_used_gb:.1f}GB/{ram_total_gb:.1f}GB) - Consider reducing MAX_CACHED_MODELS if this persists")
 
         # Check GPU VRAM if available
-        if torch.cuda.is_available():
+        if _cuda_available():
             gpu_pct, gpu_used_gb, gpu_total_gb = self._get_gpu_memory_usage()
 
             # EMERGENCY: If VRAM is extremely high (95%+), evict ALL models
@@ -182,21 +213,27 @@ class LRUPipelineCache(OrderedDict):
         self.last_access_times.pop(old_key, None)
         logger.info(f"🧹 Auto-evicted oldest model: {old_key} (memory management)")
 
-        # Clean up GPU memory
+        # Clean up GPU memory - handle both CT2 and transformers
         try:
-            if hasattr(old_val, "model"):
-                old_val.model.cpu()
-                logger.debug(f"Moved evicted model {old_key} to CPU")
+            # CT2TranslatorWrapper has .unload() method
+            if hasattr(old_val, "unload"):
+                old_val.unload()
+                logger.debug(f"Unloaded CT2 model {old_key}")
+            # CT2 translator object directly
+            elif hasattr(old_val, "translator") and hasattr(old_val.translator, "unload"):
+                old_val.translator.unload()
+                logger.debug(f"Unloaded CT2 translator {old_key}")
+            # Transformers pipeline has .model attribute
+            elif hasattr(old_val, "model"):
+                if hasattr(old_val.model, "cpu"):
+                    old_val.model.cpu()
+                    logger.debug(f"Moved evicted model {old_key} to CPU")
             del old_val
         except Exception as e:
             logger.debug(f"Error during eviction cleanup: {e}")
 
-        if torch.cuda.is_available():
-            try:
-                torch.cuda.empty_cache()
-                logger.debug("Cleared CUDA cache after auto-eviction")
-            except Exception as e:
-                logger.debug(f"Error clearing CUDA cache: {e}")
+        _clear_cuda_cache()
+        logger.debug("Cleared CUDA cache after auto-eviction")
 
         # Pi-specific: aggressive memory cleanup
         try:
@@ -209,7 +246,7 @@ class LRUPipelineCache(OrderedDict):
         ram_pct, ram_used_gb, ram_total_gb = self._get_system_memory_usage()
         logger.info(f"💾 RAM after eviction: {ram_pct:.1f}% ({ram_used_gb:.1f}GB/{ram_total_gb:.1f}GB)")
 
-        if torch.cuda.is_available():
+        if _cuda_available():
             gpu_pct, gpu_used_gb, gpu_total_gb = self._get_gpu_memory_usage()
             logger.info(f"🎮 VRAM after eviction: {gpu_pct:.1f}% ({gpu_used_gb:.1f}GB/{gpu_total_gb:.1f}GB)")
 
@@ -236,9 +273,13 @@ class LRUPipelineCache(OrderedDict):
                 self.last_access_times.pop(old_key, None)
                 logger.info(f"   Evicting: {old_key}")
 
-                # Clean up
+                # Clean up - handle both CT2 and transformers
                 try:
-                    if hasattr(old_val, "model"):
+                    if hasattr(old_val, "unload"):
+                        old_val.unload()
+                    elif hasattr(old_val, "translator") and hasattr(old_val.translator, "unload"):
+                        old_val.translator.unload()
+                    elif hasattr(old_val, "model") and hasattr(old_val.model, "cpu"):
                         old_val.model.cpu()
                     del old_val
                 except Exception as e:
@@ -252,9 +293,9 @@ class LRUPipelineCache(OrderedDict):
         self.last_access_times.clear()
 
         # Aggressive CUDA cleanup
-        if torch.cuda.is_available():
+        _clear_cuda_cache()
+        if TORCH_AVAILABLE and torch.cuda.is_available():
             try:
-                torch.cuda.empty_cache()
                 torch.cuda.synchronize()  # Wait for all operations to complete
                 logger.info("Cleared and synchronized CUDA cache")
             except Exception as e:
@@ -283,7 +324,7 @@ class LRUPipelineCache(OrderedDict):
         if ram_pct >= 95.0:
             return True
 
-        if torch.cuda.is_available():
+        if _cuda_available():
             gpu_pct, _, _ = self._get_gpu_memory_usage()
             if gpu_pct >= 95.0:
                 return True
@@ -333,9 +374,15 @@ class LRUPipelineCache(OrderedDict):
                     idle_mins = int(idle_duration / 60)
                     logger.info(f"⏰ Evicted idle model: {key} (idle for {idle_mins}m {int(idle_duration % 60)}s)")
 
-                    # Clean up GPU memory
+                    # Clean up GPU memory - handle both CT2 and transformers
                     try:
-                        if hasattr(val, "model"):
+                        if hasattr(val, "unload"):
+                            val.unload()
+                            logger.debug(f"Unloaded CT2 model {key}")
+                        elif hasattr(val, "translator") and hasattr(val.translator, "unload"):
+                            val.translator.unload()
+                            logger.debug(f"Unloaded CT2 translator {key}")
+                        elif hasattr(val, "model") and hasattr(val.model, "cpu"):
                             val.model.cpu()
                             logger.debug(f"Moved evicted model {key} to CPU")
                         del val
@@ -346,12 +393,9 @@ class LRUPipelineCache(OrderedDict):
                 logger.error(f"Error evicting idle model {key}: {e}")
 
         # Clear CUDA cache after evictions
-        if evicted_keys and torch.cuda.is_available():
-            try:
-                torch.cuda.empty_cache()
-                logger.debug(f"Cleared CUDA cache after idle evictions")
-            except Exception as e:
-                logger.debug(f"Error clearing CUDA cache: {e}")
+        if evicted_keys:
+            _clear_cuda_cache()
+            logger.debug("Cleared CUDA cache after idle evictions")
 
         if evicted_keys:
             logger.info(f"⏰ Idle eviction complete: {len(evicted_keys)} models evicted ({len(self)}/{self.capacity} remaining)")
@@ -408,21 +452,23 @@ class LRUPipelineCache(OrderedDict):
 
             logger.warning(f"⚠️  Cache FULL! Evicting oldest model: {old_key} (to make room for {key})")
 
-            # Try to free GPU memory for the evicted pipeline
+            # Try to free GPU memory - handle both CT2 and transformers
             try:
-                if hasattr(old_val, "model"):
+                if hasattr(old_val, "unload"):
+                    old_val.unload()
+                    logger.info(f"Unloaded CT2 model {old_key} to free GPU memory")
+                elif hasattr(old_val, "translator") and hasattr(old_val.translator, "unload"):
+                    old_val.translator.unload()
+                    logger.info(f"Unloaded CT2 translator {old_key} to free GPU memory")
+                elif hasattr(old_val, "model") and hasattr(old_val.model, "cpu"):
                     old_val.model.cpu()
                     logger.info(f"Moved evicted model {old_key} to CPU to free GPU memory")
                 del old_val
             except Exception as e:
                 logger.debug(f"Error during cache eviction cleanup: {e}")
 
-            if torch.cuda.is_available():
-                try:
-                    torch.cuda.empty_cache()
-                    logger.debug(f"Cleared CUDA cache after eviction")
-                except Exception as e:
-                    logger.debug(f"Error clearing CUDA cache: {e}")
+            _clear_cuda_cache()
+            logger.debug("Cleared CUDA cache after eviction")
 
     def get_status(self) -> dict:
         """Get current cache status including memory usage.
@@ -447,7 +493,7 @@ class LRUPipelineCache(OrderedDict):
                 "status": "critical" if ram_pct >= 90 else "warning" if ram_pct >= 80 else "ok"
             }
 
-            if torch.cuda.is_available():
+            if _cuda_available():
                 gpu_pct, gpu_used_gb, gpu_total_gb = self._get_gpu_memory_usage()
                 status["gpu_memory"] = {
                     "percentage": round(gpu_pct, 1),
