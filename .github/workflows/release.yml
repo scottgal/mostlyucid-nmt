@@ -124,7 +124,12 @@ jobs:
           if [ "${{ runner.os }}" == "Windows" ]; then
             find . -name "mostlylucid-nmt.exe" -type f | head -1 | xargs -I {} mv {} dist/
             echo "exe_path=dist/mostlylucid-nmt.exe" >> $GITHUB_OUTPUT
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            # macOS BSD find doesn't support -executable, use -perm +111 instead
+            find . -name "mostlylucid-nmt" -type f -perm +111 | head -1 | xargs -I {} mv {} dist/
+            echo "exe_path=dist/mostlylucid-nmt" >> $GITHUB_OUTPUT
           else
+            # Linux GNU find supports -executable
             find . -name "mostlylucid-nmt" -type f -executable | head -1 | xargs -I {} mv {} dist/
             echo "exe_path=dist/mostlylucid-nmt" >> $GITHUB_OUTPUT
           fi
