@@ -28,16 +28,30 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: mostlylucid-nmt.exe
-            asset_name: mostlylucid-nmt-windows-x64.exe
+            asset_name: mostlylucid-nmt-windows-x64.zip
+            exe_name: mostlylucid-nmt.exe
           - os: ubuntu-latest
-            artifact_name: mostlylucid-nmt
-            asset_name: mostlylucid-nmt-linux-x64
+            asset_name: mostlylucid-nmt-linux-x64.tar.gz
+            exe_name: mostlylucid-nmt
           - os: macos-latest
-            artifact_name: mostlylucid-nmt
-            asset_name: mostlylucid-nmt-macos-x64
+            asset_name: mostlylucid-nmt-macos-x64.tar.gz
+            exe_name: mostlylucid-nmt
 
     steps:
+      - name: Free disk space (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          # Remove unnecessary large packages
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          echo "Disk space after cleanup:"
+          df -h
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -47,25 +61,16 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install dependencies (CPU-only for smaller size)
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install -r requirements.txt
 
-      - name: Install UPX (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y upx
+          # Install CPU-only PyTorch (MUCH smaller than CUDA version)
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Install UPX (Windows)
-        if: runner.os == 'Windows'
-        run: choco install upx -y
-        continue-on-error: true
-
-      - name: Install UPX (macOS)
-        if: runner.os == 'macOS'
-        run: brew install upx
-        continue-on-error: true
+          # Install other requirements (skip torch since we installed CPU version)
+          pip install fastapi pydantic uvicorn gunicorn transformers langdetect sentencepiece sacremoses protobuf httpx tqdm psutil
 
       - name: Generate version string
         id: version
@@ -84,7 +89,6 @@ jobs:
       - name: Update version in source
         shell: bash
         run: |
-          # Create __init__.py with version if it doesn't exist
           echo '__version__ = "${{ steps.version.outputs.version }}"' > src/__version__.py
 
       - name: Build executable
@@ -93,31 +97,34 @@ jobs:
       - name: Test executable
         shell: bash
         run: |
+          # onedir mode creates dist/mostlylucid-nmt/mostlylucid-nmt[.exe]
           if [ "${{ runner.os }}" == "Windows" ]; then
-            ./dist/mostlylucid-nmt.exe --version || echo "Version check done"
-            ./dist/mostlylucid-nmt.exe --info || echo "Info check done"
+            ./dist/mostlylucid-nmt/mostlylucid-nmt.exe --version || echo "Version check done"
+            ./dist/mostlylucid-nmt/mostlylucid-nmt.exe info || echo "Info check done"
           else
-            ./dist/mostlylucid-nmt --version || echo "Version check done"
-            ./dist/mostlylucid-nmt --info || echo "Info check done"
+            ./dist/mostlylucid-nmt/mostlylucid-nmt --version || echo "Version check done"
+            ./dist/mostlylucid-nmt/mostlylucid-nmt info || echo "Info check done"
           fi
 
-      - name: Get executable size
+      - name: Get build size
         id: size
         shell: bash
         run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            SIZE=$(stat -c%s "dist/${{ matrix.artifact_name }}" 2>/dev/null || stat -f%z "dist/${{ matrix.artifact_name }}")
-          else
-            SIZE=$(stat -c%s "dist/${{ matrix.artifact_name }}" 2>/dev/null || stat -f%z "dist/${{ matrix.artifact_name }}")
-          fi
-          SIZE_MB=$((SIZE / 1024 / 1024))
-          echo "size_mb=${SIZE_MB}" >> $GITHUB_OUTPUT
-          echo "Executable size: ${SIZE_MB} MB"
+          SIZE=$(du -sm dist/mostlylucid-nmt | cut -f1)
+          echo "size_mb=${SIZE}" >> $GITHUB_OUTPUT
+          echo "Build size: ${SIZE} MB"
 
-      - name: Rename artifact
-        shell: bash
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          mv "dist/${{ matrix.artifact_name }}" "dist/${{ matrix.asset_name }}"
+          Compress-Archive -Path dist/mostlylucid-nmt -DestinationPath dist/${{ matrix.asset_name }}
+
+      - name: Create archive (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          tar -czvf ${{ matrix.asset_name }} mostlylucid-nmt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -132,7 +139,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** ${{ matrix.asset_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Size:** ~${{ steps.size.outputs.size_mb }} MB" >> $GITHUB_STEP_SUMMARY
+          echo "**Size:** ~${{ steps.size.outputs.size_mb }} MB (uncompressed)" >> $GITHUB_STEP_SUMMARY
 
   release:
     name: Create Release
@@ -158,16 +165,15 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Generate checksums
+      - name: Prepare release files
         run: |
-          cd artifacts
-          for dir in */; do
-            for file in "$dir"*; do
-              if [ -f "$file" ]; then
-                sha256sum "$file" >> checksums.txt
-              fi
-            done
-          done
+          mkdir -p release
+          # Move archives to release folder with flat structure
+          find artifacts -name "*.zip" -exec mv {} release/ \;
+          find artifacts -name "*.tar.gz" -exec mv {} release/ \;
+          # Generate checksums
+          cd release
+          sha256sum * > checksums.txt
           cat checksums.txt
 
       - name: Create Release
@@ -180,71 +186,59 @@ jobs:
           body: |
             ## MostlyLucid-NMT v${{ steps.version.outputs.version }}
 
-            A FastAPI neural machine translation service with support for Opus-MT, mBART50, and M2M100 models.
+            Neural machine translation with Opus-MT, mBART50, and M2M100 models.
 
-            ### Downloads
+            ### Downloads (CPU-only, compact builds)
 
-            | Platform | File | Description |
-            |----------|------|-------------|
-            | Windows | `mostlylucid-nmt-windows-x64.exe` | Windows x64 standalone executable |
-            | Linux | `mostlylucid-nmt-linux-x64` | Linux x64 standalone executable |
-            | macOS | `mostlylucid-nmt-macos-x64` | macOS x64 standalone executable |
+            | Platform | File | Size |
+            |----------|------|------|
+            | Windows | `mostlylucid-nmt-windows-x64.zip` | ~150MB |
+            | Linux | `mostlylucid-nmt-linux-x64.tar.gz` | ~150MB |
+            | macOS | `mostlylucid-nmt-macos-x64.tar.gz` | ~150MB |
+
+            These are **CPU-only** builds for portability and small size. For **GPU acceleration**, use Docker (see below).
 
             ### Quick Start
 
             ```bash
-            # Start the server
-            ./mostlylucid-nmt
+            # Extract
+            tar -xzf mostlylucid-nmt-linux-x64.tar.gz  # Linux/macOS
+            # Or unzip on Windows
 
-            # Or on Windows
-            mostlylucid-nmt.exe
+            cd mostlylucid-nmt
 
-            # Check if ready
-            ./mostlylucid-nmt --check
+            # Translate directly
+            ./mostlylucid-nmt translate "Hello world" --to de
 
-            # Translate text (requires running server)
-            ./mostlylucid-nmt --translate "Hello world" -s en -t de
+            # Or start server for faster batch processing
+            ./mostlylucid-nmt server
             ```
 
-            ### LLM CLI Tool Integration
-
-            The executable can be used as a translation tool for LLM CLI tools:
+            ### CLI Commands
 
             ```bash
-            # Start server in background
-            ./mostlylucid-nmt --background
-
-            # Translate with JSON output
-            ./mostlylucid-nmt --translate "Your text here" -s en -t de --json
-
-            # Check server status
-            ./mostlylucid-nmt --status
+            translate "text" --to de    # Direct translation (loads model)
+            server                       # Start HTTP server
+            server --background          # Run in background
+            languages                    # List supported languages
+            status                       # Check server status
             ```
 
-            ### Configuration
+            ### GPU Acceleration (Docker)
 
-            Set environment variables before running:
+            For GPU support, use Docker images instead:
 
             ```bash
-            export MODEL_FAMILY=opus-mt    # or mbart50, m2m100
-            export USE_GPU=true            # Enable GPU acceleration
-            export CHUNK_CACHE_ENABLED=1   # Enable translation caching
-            ```
+            # GPU with CUDA
+            docker run --gpus all -p 8000:8000 scottgal/mostlylucid-nmt:gpu
 
-            ### Docker
-
-            Docker images are also available:
-            ```bash
-            docker pull scottgal/mostlylucid-nmt:cpu
-            docker pull scottgal/mostlylucid-nmt:gpu
+            # CPU Docker (alternative to standalone exe)
+            docker run -p 8000:8000 scottgal/mostlylucid-nmt:cpu
             ```
 
             See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for full documentation.
           files: |
-            artifacts/mostlylucid-nmt-windows-x64.exe/*
-            artifacts/mostlylucid-nmt-linux-x64/*
-            artifacts/mostlylucid-nmt-macos-x64/*
-            artifacts/checksums.txt
+            release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
