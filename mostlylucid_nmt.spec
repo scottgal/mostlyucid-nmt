@@ -200,18 +200,19 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# Use onedir mode - creates a folder with exe + libs
-# This is more practical for large dependencies like PyTorch
+# Single executable (onefile mode)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,  # Don't bundle binaries into exe
     name='mostlylucid-nmt',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,  # Skip UPX - too slow for large builds
+    strip=True,  # Strip symbols to reduce size
+    upx=False,   # UPX causes issues with torch
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -219,16 +220,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
-)
-
-# Collect into a directory
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name='mostlylucid-nmt',
 )

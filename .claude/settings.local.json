@@ -18,7 +18,11 @@
       "Bash(powershell -Command \"docker build -f E:/source/mostlylucid-nmt/Dockerfile.gpu.min -t mostlylucid-nmt:gpu-test E:/source/mostlylucid-nmt/\")",
       "Bash(python:*)",
       "Bash(pip show:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
