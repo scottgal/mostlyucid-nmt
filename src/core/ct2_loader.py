@@ -12,17 +12,24 @@ from src.core.logging import logger
 
 
 # Pre-converted CT2 model patterns on HuggingFace
+# These are downloaded directly without needing conversion (instant!)
+#
+# Coverage:
+#   - Opus-MT: 2,177 models from gaudi/ (covers virtually all pairs)
+#   - M2M100: Full model from michaelfeil/
+#   - mBART50: No pre-converted available (converts on first use, ~5-10 min)
+#
 CT2_PRECONVERTED = {
     "opus-mt": {
         "pattern": "gaudi/opus-mt-{src}-{tgt}-ctranslate2",
-        "check_exists": True,  # Need to verify each pair exists
+        "check_exists": True,  # Verify pair exists (most do, 2177 available)
     },
     "mbart50": {
-        "repo": None,  # No known pre-converted, always convert
+        "repo": None,  # No known pre-converted - converts on first use (~5-10 min)
     },
     "m2m100": {
         "repo": "michaelfeil/ct2fast-m2m100_418M",
-        "check_exists": False,  # Single repo for all pairs
+        "check_exists": False,  # Single repo for all 100 languages
     },
 }
 
@@ -199,9 +206,12 @@ class CT2ModelLoader:
             "ct2-transformers-converter",
             "--model", hf_model_name,
             "--output_dir", str(local_path),
-            "--quantization", config.CT2_QUANTIZATION,
             "--force",
         ]
+
+        # Only add quantization if not 'default' (CT2 uses float32 by default)
+        if config.CT2_QUANTIZATION and config.CT2_QUANTIZATION.lower() != "default":
+            cmd.extend(["--quantization", config.CT2_QUANTIZATION])
 
         # Add low_cpu_mem_usage for large models
         if family in ("mbart50", "m2m100"):

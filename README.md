@@ -18,6 +18,7 @@ A production-ready FastAPI service providing an EasyNMT-compatible HTTP API for 
 - EasyNMT-compatible endpoints: `/translate` (GET/POST), `/lang_pairs`, `/language_detection`, `/model_name`
 - Auto-chunking for texts of any size
 - CPU and GPU support with on-demand model loading and LRU cache
+- **Dual backend support:** CTranslate2 (CPU/standalone) or PyTorch (GPU)
 - Volume-mapped model caching for persistence
 - Backpressure and queuing with smart `Retry-After` estimation
 - Intelligent memory management to prevent OOM crashes
@@ -280,6 +281,50 @@ docker run -p 8000:8000 \
 
 ---
 
+## Translation Backends
+
+The service supports two inference backends that are automatically selected based on available packages:
+
+| Backend | Package | Use Case | Size | GPU Support |
+|---------|---------|----------|------|-------------|
+| **CTranslate2** | `ctranslate2` | Standalone exe, CPU Docker | ~20MB | Yes (CUDA) |
+| **PyTorch** | `torch` + `transformers` | GPU Docker, development | ~200MB+ | Yes (CUDA) |
+
+**How it works:**
+- Standalone executables use CTranslate2 for ~10x smaller package size
+- CPU Docker (`:cpu`) uses CTranslate2 for faster inference and smaller images
+- GPU Docker (`:gpu`) uses PyTorch for proven CUDA support
+- Models are converted to CTranslate2 format on first use (cached for future)
+
+**CTranslate2 Benefits:**
+- ~10x smaller package size (18MB vs 200MB+ for PyTorch)
+- ~4x less memory usage
+- ~2-10x faster inference on CPU
+- Same model quality (uses same weights)
+
+**Configuration:**
+```bash
+# Force specific backend (auto-detected by default)
+-e TRANSLATION_BACKEND=ct2       # Use CTranslate2
+-e TRANSLATION_BACKEND=transformers  # Use PyTorch
+
+# CTranslate2 specific settings
+-e CT2_COMPUTE_TYPE=auto         # auto, float16, int8, etc.
+-e CT2_INTER_THREADS=1           # Threads between operations
+-e CT2_INTRA_THREADS=4           # Threads within operations
+```
+
+**First-use model loading:** The first translation request for any language pair will:
+1. Download the HuggingFace model (~300MB for Opus-MT, ~2.4GB for mBART50/M2M100)
+2. Convert to CTranslate2 format (takes 2-15 minutes depending on model size)
+3. Cache the converted model for instant future use
+
+Subsequent requests for the same pair are instant. Use volume mapping (`-v ./model-cache:/models`) to persist across restarts.
+
+**Pre-converted models:** Some models have pre-converted versions on HuggingFace (e.g., `michaelfeil/ct2fast-m2m100_418M` for M2M100) which skip the conversion step entirely.
+
+---
+
 ## API Endpoints
 
 Full API documentation at `/docs` (Swagger UI).
@@ -472,24 +517,25 @@ docker run -p 8000:8000 \
 Build a self-contained executable (no Python required to run):
 
 ```bash
-# Install PyInstaller
-pip install pyinstaller
+# Install build dependencies
+pip install nuitka ordered-set zstandard
+pip install ctranslate2  # Uses CT2 instead of PyTorch for ~10x smaller exe
 
-# Windows PowerShell
-.\build_exe.ps1
-
-# Linux/Mac
-chmod +x build_exe.sh
-./build_exe.sh
+# Build with Nuitka (creates single-file executable)
+python -m nuitka \
+  --standalone \
+  --onefile \
+  --output-filename=mostlylucid-nmt \
+  --include-package=src \
+  --include-package=transformers.models.marian \
+  --include-package=transformers.models.mbart \
+  --include-package=transformers.models.m2m_100 \
+  run_server.py
 ```
 
-The executable will be created in `dist/mostlylucid-nmt` (~50-100MB depending on platform).
+The executable will be created as a single file (~50-80MB depending on platform).
 
-**Options:**
-```bash
-.\build_exe.ps1 -Clean    # Clean build
-.\build_exe.ps1 -NoUpx    # Skip UPX compression (faster build)
-```
+**GitHub Actions:** Pre-built executables are available in [Releases](https://github.com/scottgal/mostlylucid-nmt/releases) for Windows, Linux, and macOS.
 
 ### Docker Images
 

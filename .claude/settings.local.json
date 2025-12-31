@@ -39,7 +39,8 @@
       "WebFetch(domain:opennmt.net)",
       "Bash(.venv/Scripts/pip.exe show:*)",
       "Bash(.venv/Scripts/python.exe -m pip install:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(curl.exe:*)"
     ],
     "deny": [],
     "ask": []

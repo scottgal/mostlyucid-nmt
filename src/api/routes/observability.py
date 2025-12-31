@@ -1,11 +1,11 @@
 """Health, readiness, and observability endpoints."""
 
-import torch
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
 from src.config import config
 from src.core.device import device_manager
+from src.core.cache import _cuda_available
 from src.services.model_manager import model_manager
 from src.services.queue_manager import queue_manager
 from src.models import (
@@ -38,7 +38,7 @@ async def healthz():
 )
 async def readyz():
     """Readiness check endpoint."""
-    device_ok = (device_manager.device_index == -1) or torch.cuda.is_available()
+    device_ok = (device_manager.device_index == -1) or _cuda_available()
 
     return ReadinessResponse(
         status="ready" if device_ok else "degraded",

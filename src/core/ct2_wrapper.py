@@ -51,14 +51,19 @@ class CT2TranslatorWrapper:
         if compute_type == "auto":
             compute_type = "float16" if device == "cuda" else "default"
 
-        self.translator = ctranslate2.Translator(
-            model_path,
-            device=device,
-            device_index=[device_index] if device == "cuda" else None,
-            inter_threads=config.CT2_INTER_THREADS,
-            intra_threads=config.CT2_INTRA_THREADS,
-            compute_type=compute_type,
-        )
+        # Build kwargs - only include device_index for CUDA devices
+        translator_kwargs: Dict[str, Any] = {
+            "device": device,
+            "inter_threads": config.CT2_INTER_THREADS,
+            "intra_threads": config.CT2_INTRA_THREADS,
+            "compute_type": compute_type,
+        }
+
+        # Only pass device_index for CUDA devices
+        if device == "cuda":
+            translator_kwargs["device_index"] = device_index
+
+        self.translator = ctranslate2.Translator(model_path, **translator_kwargs)
 
         # Initialize tokenizer
         logger.info(f"Loading tokenizer from {tokenizer_name}")
@@ -81,8 +86,12 @@ class CT2TranslatorWrapper:
             if hasattr(self.tokenizer, 'src_lang'):
                 self.tokenizer.src_lang = self.src_lang
 
-    def _get_target_prefix(self) -> Optional[List[str]]:
-        """Get target language prefix tokens for multilingual models."""
+    def _get_target_prefix(self) -> Optional[List[List[str]]]:
+        """Get target language prefix tokens for multilingual models.
+
+        Returns:
+            List of token lists (one per input), or None for non-multilingual models
+        """
         if self.family == "mbart50":
             # mBART50: target starts with target language token
             tgt_code = f"{self.tgt_lang}_XX"

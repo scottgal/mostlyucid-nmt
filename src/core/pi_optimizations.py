@@ -8,14 +8,21 @@ Key optimizations:
 2. Memory-mapped model loading (mmap - don't load entire model into RAM)
 3. Model quantization (int8 for smaller memory footprint)
 4. Aggressive garbage collection
-5. CPU-specific PyTorch optimizations
+5. CPU-specific PyTorch optimizations (when torch is available)
 """
 
 import os
-import torch
 import gc
 from typing import Any, Dict, Optional
 from src.core.logging import logger
+
+# Torch is optional - CT2 backend doesn't need it
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None  # type: ignore
+    TORCH_AVAILABLE = False
 
 
 class PiOptimizer:
@@ -26,7 +33,10 @@ class PiOptimizer:
         self.is_pi = self._detect_pi()
         if self.is_pi:
             logger.info("[PiOptimizer] Raspberry Pi detected - enabling optimizations")
-            self._configure_pytorch_for_pi()
+            if TORCH_AVAILABLE:
+                self._configure_pytorch_for_pi()
+            else:
+                logger.info("[PiOptimizer] PyTorch not available - skipping torch-specific optimizations")
         else:
             logger.info("[PiOptimizer] Not running on Raspberry Pi - optimizations disabled")
 
@@ -82,6 +92,15 @@ class PiOptimizer:
         """
         if not self.is_pi:
             return {}
+
+        if not TORCH_AVAILABLE:
+            # Without torch, we can only set non-torch kwargs
+            kwargs = {
+                "low_cpu_mem_usage": True,
+                "use_safetensors": True,
+            }
+            logger.info(f"[PiOptimizer] Model loading kwargs (no torch): {kwargs}")
+            return kwargs
 
         kwargs = {
             # Use memory-mapped loading - doesn't load entire model into RAM
@@ -148,7 +167,7 @@ class PiOptimizer:
         """Quantize model to int8 for smaller memory footprint.
 
         WARNING: Quantization reduces quality slightly but saves 75% memory.
-        Only use if running out of RAM.
+        Only use if running out of RAM. Requires PyTorch.
 
         Args:
             model: The model to quantize
@@ -158,6 +177,10 @@ class PiOptimizer:
             Quantized model
         """
         if not self.is_pi:
+            return model
+
+        if not TORCH_AVAILABLE:
+            logger.warning("[PiOptimizer] Quantization requires PyTorch - skipping")
             return model
 
         try:

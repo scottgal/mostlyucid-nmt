@@ -27,7 +27,10 @@ mostlylucid-nmt/
 │   │   ├── logging.py          # Structured logging setup
 │   │   ├── cache.py            # LRU pipeline cache with GPU memory management
 │   │   ├── chunk_cache.py      # LFU chunk translation cache
-│   │   └── device.py           # Device selection and management
+│   │   ├── device.py           # Device selection and management
+│   │   ├── ct2_loader.py       # CTranslate2 model loading and conversion
+│   │   ├── ct2_wrapper.py      # CTranslate2 pipeline-compatible wrapper
+│   │   └── pi_optimizations.py # Raspberry Pi optimizations
 │   ├── services/               # Business logic layer
 │   │   ├── model_manager.py    # Model loading and caching (supports opus-mt, mbart50, m2m100)
 │   │   ├── model_discovery.py  # Discovers available models from Hugging Face
@@ -183,6 +186,45 @@ New configuration options:
 - `SUPPORTED_LANGS`: Language codes for Opus-MT (13 languages)
 - `MBART50_LANGS`: Language codes for mBART50 (50 languages)
 - `M2M100_LANGS`: Language codes for M2M100 (100 languages)
+
+CTranslate2 backend options:
+- `TRANSLATION_BACKEND`: `ct2|transformers` (default: `ct2` if available)
+- `CT2_COMPUTE_TYPE`: `auto|float16|int8|float32` (default: `auto`)
+- `CT2_QUANTIZATION`: `default|float16|int8` (default: `default`, used during conversion)
+- `CT2_INTER_THREADS`: Inter-operation threads (default: `1`)
+- `CT2_INTRA_THREADS`: Intra-operation threads (default: `4`)
+
+### CTranslate2 Backend (src/core/ct2_loader.py, ct2_wrapper.py)
+
+The CT2 backend provides ~10x smaller package size and faster CPU inference:
+
+**CT2ModelLoader** handles model discovery, conversion, and caching:
+1. Check local cache for previously converted CT2 models
+2. Check HuggingFace for pre-converted CT2 models
+3. Convert HuggingFace model to CT2 format on first use
+
+Pre-converted models on HuggingFace:
+- `michaelfeil/ct2fast-m2m100_418M` - M2M100 (full model)
+- `gaudi/opus-mt-{src}-{tgt}-ctranslate2` - Some Opus-MT pairs
+
+**CT2TranslatorWrapper** provides pipeline-compatible interface:
+```python
+# Same API as transformers pipeline
+wrapper(["Hello world"], max_length=512, num_beams=5)
+# Returns: [{"translation_text": "Hallo Welt"}]
+```
+
+**Hosting your own pre-converted models:**
+```bash
+# Convert locally
+ct2-transformers-converter --model facebook/mbart-large-50-many-to-many-mmt \
+  --output_dir ./mbart50-ct2 --quantization float32
+
+# Upload to HuggingFace
+huggingface-cli upload yourname/mbart50-ct2 ./mbart50-ct2
+
+# Update CT2_PRECONVERTED in ct2_loader.py to use your repo
+```
 
 ### Exception Handling (src/exceptions.py)
 

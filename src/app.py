@@ -1,9 +1,11 @@
 """Main FastAPI application with dependency injection."""
 
 import asyncio
-import torch
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+
+# Import CUDA helpers from cache module (torch is optional)
+from src.core.cache import _cuda_available, _clear_cuda_cache
 
 from fastapi import FastAPI, Depends, Query, Request
 from typing import List
@@ -71,10 +73,10 @@ async def _maintenance_task():
 
             # CUDA cache clearing
             if cuda_interval > 0 and cuda_counter >= cuda_interval:
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+                if _cuda_available():
+                    _clear_cuda_cache()
                     if config.REQUEST_LOG:
-                        logger.debug("maintenance: torch.cuda.empty_cache()")
+                        logger.debug("maintenance: CUDA cache cleared")
                 cuda_counter = 0
 
             # Idle model eviction
@@ -185,9 +187,9 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Error shutting down frontend executor: {e}")
 
     # Clear CUDA cache
-    if torch.cuda.is_available():
+    if _cuda_available():
         try:
-            torch.cuda.empty_cache()
+            _clear_cuda_cache()
         except Exception:
             pass
 

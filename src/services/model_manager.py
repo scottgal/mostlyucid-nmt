@@ -13,12 +13,16 @@ from src.core.pi_optimizations import pi_optimizer
 from src.exceptions import ModelLoadError
 
 # Import backend-specific modules
+# CT2 backend - only if ctranslate2 is installed
+CT2_AVAILABLE = False
 if config.TRANSLATION_BACKEND == "ct2":
-    from src.core.ct2_loader import get_ct2_loader
-    from src.core.ct2_wrapper import CT2TranslatorWrapper
-    CT2_AVAILABLE = True
-else:
-    CT2_AVAILABLE = False
+    try:
+        from src.core.ct2_loader import get_ct2_loader
+        from src.core.ct2_wrapper import CT2TranslatorWrapper
+        CT2_AVAILABLE = True
+    except ImportError as e:
+        logger.warning(f"CTranslate2 backend requested but not available: {e}")
+        CT2_AVAILABLE = False
 
 # Transformers pipeline (only import if using transformers backend or as fallback)
 try:
@@ -27,6 +31,14 @@ try:
 except ImportError:
     transformers_pipeline = None  # type: ignore
     TRANSFORMERS_AVAILABLE = False
+
+# Log backend availability
+if CT2_AVAILABLE:
+    logger.info("Translation backend: CTranslate2")
+elif TRANSFORMERS_AVAILABLE:
+    logger.info("Translation backend: PyTorch/Transformers")
+else:
+    logger.error("No translation backend available! Install ctranslate2 or torch+transformers")
 
 # Enable beautiful download progress bars
 setup_hf_progress()
