@@ -114,23 +114,11 @@ jobs:
           echo "size_mb=${SIZE}" >> $GITHUB_OUTPUT
           echo "Build size: ${SIZE} MB"
 
-      - name: Create archive (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path dist/mostlylucid-nmt -DestinationPath dist/${{ matrix.asset_name }}
-
-      - name: Create archive (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          cd dist
-          tar -czvf ${{ matrix.asset_name }} mostlylucid-nmt
-
-      - name: Upload artifact
+      - name: Upload build folder
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
-          path: dist/${{ matrix.asset_name }}
+          name: build-${{ matrix.os }}
+          path: dist/mostlylucid-nmt/
           retention-days: 7
 
       - name: Build summary
@@ -157,7 +145,7 @@ jobs:
           path: artifacts
 
       - name: List artifacts
-        run: find artifacts -type f -ls
+        run: find artifacts -type f -ls | head -50
 
       - name: Generate version string
         id: version
@@ -165,16 +153,45 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Prepare release files
+      - name: Create release archives
         run: |
           mkdir -p release
-          # Move archives to release folder with flat structure
-          find artifacts -name "*.zip" -exec mv {} release/ \;
-          find artifacts -name "*.tar.gz" -exec mv {} release/ \;
+
+          # Windows zip - wrap in folder so extract creates mostlylucid-nmt/
+          if [ -d "artifacts/build-windows-latest" ]; then
+            mkdir -p tmp/mostlylucid-nmt
+            cp -r artifacts/build-windows-latest/* tmp/mostlylucid-nmt/
+            cd tmp
+            zip -r ../release/mostlylucid-nmt-windows-x64.zip mostlylucid-nmt
+            cd ..
+            rm -rf tmp
+          fi
+
+          # Linux tar.gz
+          if [ -d "artifacts/build-ubuntu-latest" ]; then
+            mkdir -p tmp/mostlylucid-nmt
+            cp -r artifacts/build-ubuntu-latest/* tmp/mostlylucid-nmt/
+            cd tmp
+            tar -czvf ../release/mostlylucid-nmt-linux-x64.tar.gz mostlylucid-nmt
+            cd ..
+            rm -rf tmp
+          fi
+
+          # macOS tar.gz
+          if [ -d "artifacts/build-macos-latest" ]; then
+            mkdir -p tmp/mostlylucid-nmt
+            cp -r artifacts/build-macos-latest/* tmp/mostlylucid-nmt/
+            cd tmp
+            tar -czvf ../release/mostlylucid-nmt-macos-x64.tar.gz mostlylucid-nmt
+            cd ..
+            rm -rf tmp
+          fi
+
           # Generate checksums
           cd release
           sha256sum * > checksums.txt
           cat checksums.txt
+          ls -la
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
