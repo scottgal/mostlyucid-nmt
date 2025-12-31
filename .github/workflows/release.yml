@@ -106,6 +106,13 @@ jobs:
             --include-package=transformers.models.marian \
             --include-package=transformers.models.mbart \
             --include-package=transformers.models.m2m_100 \
+            --include-package-data=langdetect \
+            --include-distribution-metadata=sacremoses \
+            --include-distribution-metadata=sentencepiece \
+            --include-distribution-metadata=tokenizers \
+            --include-distribution-metadata=transformers \
+            --include-distribution-metadata=huggingface-hub \
+            --include-distribution-metadata=ctranslate2 \
             --nofollow-import-to=torch.cuda \
             --nofollow-import-to=torch.distributed \
             --nofollow-import-to=triton \
