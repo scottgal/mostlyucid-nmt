@@ -433,10 +433,15 @@ def cmd_info(args):
     """Show configuration info."""
     from src.config import config
 
+    # Determine device string
+    device = config.DEVICE_ENV
+    if device == "auto":
+        device = "GPU" if config.USE_GPU in ("1", "true", "yes") else "CPU (auto)"
+
     info = {
         "version": get_version(),
         "model_family": config.MODEL_FAMILY,
-        "device": config.DEVICE if config.DEVICE else ("GPU" if config.USE_GPU else "CPU"),
+        "device": device,
         "batch_size": config.EASYNMT_BATCH_SIZE,
         "max_cached_models": config.MAX_CACHED_MODELS,
         "chunk_cache": {
