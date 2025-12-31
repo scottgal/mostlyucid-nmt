@@ -40,7 +40,10 @@
       "Bash(.venv/Scripts/pip.exe show:*)",
       "Bash(.venv/Scripts/python.exe -m pip install:*)",
       "Bash(.venv/Scripts/python.exe:*)",
-      "Bash(curl.exe:*)"
+      "Bash(curl.exe:*)",
+      "Bash(cat:*)",
+      "Bash(.venvScriptspython.exe -m pytest tests/test_ct2*.py -v --tb=short)",
+      "Bash(E:\\\\source\\\\mostlylucid-nmt\\\\.venv\\\\Scripts\\\\python.exe -m pytest:*)"
     ],
     "deny": [],
     "ask": []

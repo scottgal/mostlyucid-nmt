@@ -49,6 +49,17 @@ class CT2ModelLoader:
 
         Args:
             cache_dir: Base cache directory. Defaults to ~/.cache/mostlylucid-nmt
+                      Can be overridden with MODEL_CACHE_DIR environment variable.
+
+        Cache locations:
+            - Default: ~/.cache/mostlylucid-nmt/ct2/ (all platforms)
+            - Override: MODEL_CACHE_DIR=/path/to/cache → /path/to/cache/ct2/
+
+        Cache structure:
+            ct2/
+            ├── opus-mt/en-de/     # Per-pair Opus-MT models
+            ├── mbart50/all/       # Single mBART50 model
+            └── m2m100/all/        # Single M2M100 model
         """
         if cache_dir:
             self.cache_dir = Path(cache_dir) / "ct2"
@@ -58,6 +69,12 @@ class CT2ModelLoader:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.hf_api = HfApi()
         self._preconverted_cache: dict[str, bool] = {}  # Cache HF existence checks
+
+        # Also set HuggingFace cache to same location for tokenizers
+        hf_cache = self.cache_dir.parent / "huggingface"
+        hf_cache.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault("HF_HOME", str(hf_cache))
+        os.environ.setdefault("TRANSFORMERS_CACHE", str(hf_cache))
 
         logger.info(f"CT2ModelLoader initialized with cache: {self.cache_dir}")
 

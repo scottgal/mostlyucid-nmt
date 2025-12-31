@@ -229,3 +229,95 @@ def remove_repeating_new_symbols(src: str, out: str) -> str:
     cleaned = re.sub(r"\s{3,}", "  ", cleaned)
 
     return cleaned
+
+
+def remove_word_repetitions(src: str, out: str, max_allowed_repeats: int = 3) -> str:
+    """Remove excessive word/phrase repetitions that don't exist in source.
+
+    Detects patterns like "Mòr, Mòr, Mòr, Mòr, Mòr" and truncates them
+    to a reasonable count based on what's in the source text.
+
+    Args:
+        src: Original source text
+        out: Translated output text
+        max_allowed_repeats: Maximum repeats allowed even if source has more (default: 3)
+
+    Returns:
+        Cleaned output text with excessive repetitions removed
+    """
+    if not out or len(out) < 10:
+        return out
+
+    # Count word repetitions in source (normalized)
+    def normalize_word(w: str) -> str:
+        return w.lower().strip(".,;:!?\"'()[]{}") if w else ""
+
+    def count_consecutive_repeats(text: str, pattern: str) -> int:
+        """Count max consecutive occurrences of a pattern."""
+        import re
+        # Escape special regex chars in pattern
+        escaped = re.escape(pattern)
+        # Match pattern followed by optional punctuation/space, repeated
+        matches = re.findall(rf'({escaped}[\s,;]*)+', text, re.IGNORECASE)
+        if not matches:
+            return 0
+        max_count = 0
+        for m in matches:
+            count = len(re.findall(escaped, m, re.IGNORECASE))
+            max_count = max(max_count, count)
+        return max_count
+
+    # Find repeated word sequences in output
+    words = out.split()
+    if len(words) < 4:
+        return out
+
+    # Look for runs of the same word
+    result_words = []
+    i = 0
+    while i < len(words):
+        word = words[i]
+        norm_word = normalize_word(word)
+
+        if not norm_word:
+            result_words.append(word)
+            i += 1
+            continue
+
+        # Count consecutive occurrences of this word
+        j = i + 1
+        while j < len(words) and normalize_word(words[j]) == norm_word:
+            j += 1
+
+        run_length = j - i
+
+        if run_length > max_allowed_repeats:
+            # Check how many times this word repeats in source
+            src_repeats = count_consecutive_repeats(src, norm_word)
+            allowed = max(max_allowed_repeats, min(src_repeats, max_allowed_repeats * 2))
+
+            # Keep only allowed number
+            for k in range(min(run_length, allowed)):
+                result_words.append(words[i + k])
+        else:
+            # Keep all
+            for k in range(run_length):
+                result_words.append(words[i + k])
+
+        i = j
+
+    cleaned = " ".join(result_words)
+
+    # Also detect phrase repetitions like "Mòr, Mòr, Mòr"
+    # Pattern: word followed by comma/space, repeated 4+ times
+    phrase_pattern = re.compile(r'\b(\w+)(?:[,\s]+\1){3,}\b', re.IGNORECASE)
+
+    def limit_phrase_repeats(match):
+        word = match.group(1)
+        src_count = count_consecutive_repeats(src, word)
+        allowed = max(2, min(src_count, max_allowed_repeats))
+        return ", ".join([word] * allowed)
+
+    cleaned = phrase_pattern.sub(limit_phrase_repeats, cleaned)
+
+    return cleaned

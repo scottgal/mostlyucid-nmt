@@ -79,3 +79,15 @@ class PreconvertedModelNotFoundError(TranslatorException):
     def __init__(self, model_name: str):
         self.model_name = model_name
         super().__init__(f"Pre-converted CTranslate2 model not found: {model_name}")
+
+
+class TextTooLongError(TranslatorException):
+    """Raised when input text exceeds maximum allowed length."""
+
+    def __init__(self, text_length: int, max_length: int, item_index: int = 0):
+        self.text_length = text_length
+        self.max_length = max_length
+        self.item_index = item_index
+        super().__init__(
+            f"Text at index {item_index} is too long: {text_length} chars exceeds limit of {max_length} chars"
+        )

@@ -12,8 +12,76 @@ from src.models import TranslatePostBody, TranslateResponse, TranslatePostRespon
 from src.core.logging import logger
 from src.services.language_detection import language_detector
 from src.services.queue_manager import acquire_translate_slot, queue_manager
-from src.exceptions import QueueOverflowError, ServiceBusyError
+from src.exceptions import QueueOverflowError, ServiceBusyError, TextTooLongError
 from src.utils.text_processing import is_noise
+
+
+def _is_pi_mode() -> bool:
+    """Check if we're running in Pi mode (explicitly set or auto-detected).
+
+    Returns:
+        True if running in Pi mode
+    """
+    if config.PI_MODE:
+        return True
+
+    try:
+        from src.core.pi_optimizations import pi_optimizer
+        if pi_optimizer.is_pi:
+            return True
+    except ImportError:
+        pass
+
+    return False
+
+
+def _get_max_input_length() -> int:
+    """Get maximum input text length based on environment.
+
+    Returns:
+        Maximum allowed text length in characters
+    """
+    if _is_pi_mode():
+        return config.PI_MAX_INPUT_TEXT_LENGTH
+
+    return config.MAX_INPUT_TEXT_LENGTH
+
+
+def _get_translate_timeout() -> int:
+    """Get effective translation timeout in seconds.
+
+    Uses PI_TRANSLATE_TIMEOUT_SEC on Pi if TRANSLATE_TIMEOUT_SEC is 0.
+
+    Returns:
+        Timeout in seconds, or 0 to disable
+    """
+    # If user explicitly set a timeout, use it
+    if config.TRANSLATE_TIMEOUT_SEC > 0:
+        return config.TRANSLATE_TIMEOUT_SEC
+
+    # On Pi, use Pi-specific timeout
+    if _is_pi_mode():
+        return config.PI_TRANSLATE_TIMEOUT_SEC
+
+    return 0  # No timeout by default
+
+
+def _validate_text_lengths(texts: List[str]) -> None:
+    """Validate that all texts are within allowed length limits.
+
+    Args:
+        texts: List of texts to validate
+
+    Raises:
+        TextTooLongError: If any text exceeds the maximum length
+    """
+    max_length = _get_max_input_length()
+    if max_length <= 0:
+        return  # Validation disabled
+
+    for i, text in enumerate(texts):
+        if text and len(text) > max_length:
+            raise TextTooLongError(len(text), max_length, i)
 
 if TYPE_CHECKING:
     from src.services.translation_service import TranslationService
@@ -75,6 +143,22 @@ async def translate_get(
     if not base_texts:
         return TranslateResponse(translations=[])
 
+    # Validate text lengths before processing
+    try:
+        _validate_text_lengths(base_texts)
+    except TextTooLongError as e:
+        if config.REQUEST_LOG:
+            logger.warning(f"{req_id} text too long: {e}")
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "message": f"Text too long: {e.text_length} chars exceeds limit of {e.max_length}",
+                "text_length": e.text_length,
+                "max_length": e.max_length,
+                "item_index": e.item_index
+            }
+        )
+
     # Detect language if needed using first non-noise string
     first_non_noise = next(
         (t for t in base_texts if t and (not config.INPUT_SANITIZE or not is_noise(t))),
@@ -95,15 +179,23 @@ async def translate_get(
 
     try:
         async with await acquire_translate_slot():
-            if config.TRANSLATE_TIMEOUT_SEC > 0:
+            timeout_sec = _get_translate_timeout()
+            if timeout_sec > 0:
                 texts, pivot_used, metadata_dict, error = await asyncio.wait_for(
                     translation_service.translate_async(base_texts, src, target_lang, eff_beam, perform_sentence_splitting, include_metadata),
-                    timeout=config.TRANSLATE_TIMEOUT_SEC
+                    timeout=timeout_sec
                 )
             else:
                 texts, pivot_used, metadata_dict, error = await translation_service.translate_async(
                     base_texts, src, target_lang, eff_beam, perform_sentence_splitting, include_metadata
                 )
+
+    except asyncio.TimeoutError:
+        logger.warning(f"{req_id} translation timed out after {_get_translate_timeout()}s")
+        raise HTTPException(
+            status_code=504,
+            detail={"message": f"Translation timed out after {_get_translate_timeout()} seconds"}
+        )
 
     except QueueOverflowError as e:
         retry_after = queue_manager.estimate_retry_after(e.waiters)
@@ -194,6 +286,22 @@ async def translate_post(
             translation_time=0.0
         )
 
+    # Validate text lengths before processing
+    try:
+        _validate_text_lengths(base_texts)
+    except TextTooLongError as e:
+        if config.REQUEST_LOG:
+            logger.warning(f"{req_id} text too long: {e}")
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "message": f"Text too long: {e.text_length} chars exceeds limit of {e.max_length}",
+                "text_length": e.text_length,
+                "max_length": e.max_length,
+                "item_index": e.item_index
+            }
+        )
+
     # Track if source language was auto-detected for detected_langs field
     was_auto_detected = not body.source_lang
     src = body.source_lang or language_detector.detect_language(
@@ -209,15 +317,23 @@ async def translate_post(
 
     try:
         async with await acquire_translate_slot():
-            if config.TRANSLATE_TIMEOUT_SEC > 0:
+            timeout_sec = _get_translate_timeout()
+            if timeout_sec > 0:
                 texts, pivot_used, metadata_dict, error = await asyncio.wait_for(
                     translation_service.translate_async(base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata, body.model_family),
-                    timeout=config.TRANSLATE_TIMEOUT_SEC
+                    timeout=timeout_sec
                 )
             else:
                 texts, pivot_used, metadata_dict, error = await translation_service.translate_async(
                     base_texts, src, body.target_lang, eff_beam, perform_sentence_splitting, include_metadata, body.model_family
                 )
+
+    except asyncio.TimeoutError:
+        logger.warning(f"{req_id} translation timed out after {_get_translate_timeout()}s")
+        raise HTTPException(
+            status_code=504,
+            detail={"message": f"Translation timed out after {_get_translate_timeout()} seconds"}
+        )
 
     except QueueOverflowError as e:
         retry_after = queue_manager.estimate_retry_after(e.waiters)

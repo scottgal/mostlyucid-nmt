@@ -160,6 +160,23 @@ class Config:
     AUTO_CHUNK_ENABLED: bool = os.getenv("AUTO_CHUNK_ENABLED", "1").lower() in ("1", "true", "yes")
     AUTO_CHUNK_MAX_CHARS: int = int(os.getenv("AUTO_CHUNK_MAX_CHARS", "5000"))  # Safe default per chunk
 
+    # Maximum input text length (per item) - prevents memory exhaustion on long texts
+    # Set to 0 to disable limit
+    MAX_INPUT_TEXT_LENGTH: int = int(os.getenv("MAX_INPUT_TEXT_LENGTH", "50000"))  # ~12.5k words
+
+    # Lower limit for resource-constrained devices (Pi, low-memory systems)
+    # Applied when running on detected Raspberry Pi or when PI_MODE is enabled
+    PI_MAX_INPUT_TEXT_LENGTH: int = int(os.getenv("PI_MAX_INPUT_TEXT_LENGTH", "10000"))  # ~2.5k words
+    PI_MODE: bool = os.getenv("PI_MODE", "0").lower() in ("1", "true", "yes")
+
+    # Per-chunk translation timeout in seconds (0 = disabled)
+    # Prevents individual chunks from hanging forever
+    CHUNK_TRANSLATE_TIMEOUT_SEC: int = int(os.getenv("CHUNK_TRANSLATE_TIMEOUT_SEC", "30"))
+
+    # Pi-specific translation timeout (applied automatically if Pi mode is detected)
+    # Default 60s is reasonable for Pi's slower CPU
+    PI_TRANSLATE_TIMEOUT_SEC: int = int(os.getenv("PI_TRANSLATE_TIMEOUT_SEC", "60"))
+
     # Metadata tracking (model, languages, timing, chunks, etc.)
     ENABLE_METADATA: bool = os.getenv("ENABLE_METADATA", "0").lower() in ("1", "true", "yes")
     METADATA_VIA_HEADERS: bool = os.getenv("METADATA_VIA_HEADERS", "0").lower() in ("1", "true", "yes")

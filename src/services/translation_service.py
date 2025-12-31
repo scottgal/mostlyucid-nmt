@@ -11,7 +11,8 @@ from src.utils.text_processing import (
     is_noise,
     split_sentences,
     chunk_sentences,
-    remove_repeating_new_symbols
+    remove_repeating_new_symbols,
+    remove_word_repetitions
 )
 from src.utils.symbol_masking import mask_symbols, unmask_symbols
 from src.utils.markdown_sanitizer import sanitize_translations
@@ -289,6 +290,7 @@ class TranslationService:
                 logger.debug(f"[Translate] Translation output: {out[:2] if len(out) > 2 else out}")
                 combined = config.JOIN_SENTENCES_WITH.join(out)
                 combined = remove_repeating_new_symbols(txt, combined)
+                combined = remove_word_repetitions(txt, combined)
                 logger.info(f"[Translate] Success with sentence splitting: {combined[:50]}...")
                 return (combined, False, None)
             else:
@@ -307,6 +309,7 @@ class TranslationService:
                 logger.debug(f"[Unmasking] Restored symbols")
 
                 base = remove_repeating_new_symbols(txt, base)
+                base = remove_word_repetitions(txt, base)
                 logger.info(f"[Translate] Success: '{base}'")
                 return (base, False, None)
 
@@ -347,6 +350,7 @@ class TranslationService:
 
                     combined = config.JOIN_SENTENCES_WITH.join(final)
                     combined = remove_repeating_new_symbols(txt, combined)
+                    combined = remove_word_repetitions(txt, combined)
                     return (combined, True, None)
                 else:
                     # Apply symbol masking for pivot translation
@@ -362,6 +366,7 @@ class TranslationService:
                     base = unmask_symbols(base, originals)
 
                     base = remove_repeating_new_symbols(txt, base)
+                    base = remove_word_repetitions(txt, base)
                     return (base, True, None)
 
             except Exception as pivot_err:
@@ -381,6 +386,7 @@ class TranslationService:
                             translated_chunks = self._translate_with_translator(translator_fallback, chunks, eff_beam, src, tgt, fallback_family)
                             combined = config.JOIN_SENTENCES_WITH.join(translated_chunks)
                             combined = remove_repeating_new_symbols(txt, combined)
+                            combined = remove_word_repetitions(txt, combined)
                             logger.info(f"[Fallback] Success with {fallback_family}: '{combined[:100]}'")
                             return (combined, False, None)  # Not a pivot, direct translation
                         else:
@@ -394,6 +400,7 @@ class TranslationService:
                             base = unmask_symbols(base, originals)
 
                             base = remove_repeating_new_symbols(txt, base)
+                            base = remove_word_repetitions(txt, base)
                             logger.info(f"[Fallback] Success with {fallback_family}: '{base[:100]}'")
                             return (base, False, None)  # Not a pivot, direct translation
                     except Exception as fallback_err:

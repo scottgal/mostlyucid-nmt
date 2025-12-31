@@ -119,6 +119,8 @@ class CT2TranslatorWrapper:
         max_length: int = 512,
         num_beams: int = 5,
         batch_size: int = 16,
+        no_repeat_ngram_size: int = 3,
+        repetition_penalty: float = 1.2,
         **kwargs: Any,
     ) -> List[Dict[str, str]]:
         """Translate texts, returning results in pipeline-compatible format.
@@ -128,6 +130,8 @@ class CT2TranslatorWrapper:
             max_length: Maximum output length
             num_beams: Beam size for decoding
             batch_size: Batch size (not directly used by CT2, but kept for API compat)
+            no_repeat_ngram_size: Prevent repeating n-grams of this size (default: 3)
+            repetition_penalty: Penalty for repeated tokens, >1.0 penalizes (default: 1.2)
             **kwargs: Additional arguments (ignored for compatibility)
 
         Returns:
@@ -150,13 +154,15 @@ class CT2TranslatorWrapper:
             # Expand to match batch size
             target_prefix = target_prefix * len(tokenized_inputs)
 
-        # Translate
+        # Translate with repetition prevention
         try:
             results = self.translator.translate_batch(
                 tokenized_inputs,
                 target_prefix=target_prefix,
                 beam_size=num_beams,
                 max_decoding_length=max_length,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                repetition_penalty=repetition_penalty,
                 return_scores=False,
             )
         except Exception as e:

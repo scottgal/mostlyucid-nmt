@@ -12,6 +12,14 @@ import sys
 import time
 from pathlib import Path
 
+# Fix Windows console UTF-8 encoding
+if sys.platform == "win32":
+    # Enable UTF-8 mode for Windows console
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 
 def print_banner():
     """Print startup banner."""
