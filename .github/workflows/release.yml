@@ -65,12 +65,14 @@ jobs:
       - name: Install dependencies (CPU-only for smaller size)
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller
+
+          # Nuitka for smaller executables
+          pip install nuitka ordered-set zstandard
 
           # Install CPU-only PyTorch (MUCH smaller than CUDA version)
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-          # Install other requirements (skip torch since we installed CPU version)
+          # Install other requirements
           pip install fastapi pydantic uvicorn gunicorn transformers langdetect sentencepiece sacremoses protobuf httpx tqdm psutil
 
       - name: Generate version string
@@ -92,34 +94,69 @@ jobs:
         run: |
           echo '__version__ = "${{ steps.version.outputs.version }}"' > src/__version__.py
 
-      - name: Build executable
-        run: pyinstaller mostlylucid_nmt.spec
+      - name: Build with Nuitka
+        shell: bash
+        run: |
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --assume-yes-for-downloads \
+            --output-filename=mostlylucid-nmt${{ runner.os == 'Windows' && '.exe' || '' }} \
+            --include-package=src \
+            --include-package=transformers.models.marian \
+            --include-package=transformers.models.mbart \
+            --include-package=transformers.models.m2m_100 \
+            --nofollow-import-to=torch.cuda \
+            --nofollow-import-to=torch.distributed \
+            --nofollow-import-to=triton \
+            --nofollow-import-to=tensorflow \
+            --nofollow-import-to=jax \
+            --nofollow-import-to=pytest \
+            --nofollow-import-to=matplotlib \
+            --nofollow-import-to=IPython \
+            run_server.py
+
+      - name: Find and move executable
+        id: find_exe
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            find . -name "mostlylucid-nmt.exe" -type f | head -1 | xargs -I {} mv {} dist/
+            echo "exe_path=dist/mostlylucid-nmt.exe" >> $GITHUB_OUTPUT
+          else
+            find . -name "mostlylucid-nmt" -type f -executable | head -1 | xargs -I {} mv {} dist/
+            echo "exe_path=dist/mostlylucid-nmt" >> $GITHUB_OUTPUT
+          fi
+          ls -la dist/
 
       - name: Test executable
         shell: bash
         run: |
-          # onedir mode creates dist/mostlylucid-nmt/mostlylucid-nmt[.exe]
           if [ "${{ runner.os }}" == "Windows" ]; then
-            ./dist/mostlylucid-nmt/mostlylucid-nmt.exe --version || echo "Version check done"
-            ./dist/mostlylucid-nmt/mostlylucid-nmt.exe info || echo "Info check done"
+            ./dist/mostlylucid-nmt.exe --version || echo "Version check done"
           else
-            ./dist/mostlylucid-nmt/mostlylucid-nmt --version || echo "Version check done"
-            ./dist/mostlylucid-nmt/mostlylucid-nmt info || echo "Info check done"
+            chmod +x ./dist/mostlylucid-nmt
+            ./dist/mostlylucid-nmt --version || echo "Version check done"
           fi
 
       - name: Get build size
         id: size
         shell: bash
         run: |
-          SIZE=$(du -sm dist/mostlylucid-nmt | cut -f1)
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            SIZE=$(du -sm dist/mostlylucid-nmt.exe | cut -f1)
+          else
+            SIZE=$(du -sm dist/mostlylucid-nmt | cut -f1)
+          fi
           echo "size_mb=${SIZE}" >> $GITHUB_OUTPUT
           echo "Build size: ${SIZE} MB"
 
-      - name: Upload build folder
+      - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.os }}
-          path: dist/mostlylucid-nmt/
+          path: dist/mostlylucid-nmt${{ runner.os == 'Windows' && '.exe' || '' }}
           retention-days: 7
 
       - name: Build summary
@@ -154,38 +191,23 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Create release archives
+      - name: Prepare release files
         run: |
           mkdir -p release
 
-          # Windows zip - wrap in folder so extract creates mostlylucid-nmt/
+          # Copy executables with proper names
           if [ -d "artifacts/build-windows-latest" ]; then
-            mkdir -p tmp/mostlylucid-nmt
-            cp -r artifacts/build-windows-latest/* tmp/mostlylucid-nmt/
-            cd tmp
-            zip -r ../release/mostlylucid-nmt-windows-x64.zip mostlylucid-nmt
-            cd ..
-            rm -rf tmp
+            cp artifacts/build-windows-latest/mostlylucid-nmt.exe release/mostlylucid-nmt-windows-x64.exe
           fi
 
-          # Linux tar.gz
           if [ -d "artifacts/build-ubuntu-latest" ]; then
-            mkdir -p tmp/mostlylucid-nmt
-            cp -r artifacts/build-ubuntu-latest/* tmp/mostlylucid-nmt/
-            cd tmp
-            tar -czvf ../release/mostlylucid-nmt-linux-x64.tar.gz mostlylucid-nmt
-            cd ..
-            rm -rf tmp
+            cp artifacts/build-ubuntu-latest/mostlylucid-nmt release/mostlylucid-nmt-linux-x64
+            chmod +x release/mostlylucid-nmt-linux-x64
           fi
 
-          # macOS tar.gz
           if [ -d "artifacts/build-macos-latest" ]; then
-            mkdir -p tmp/mostlylucid-nmt
-            cp -r artifacts/build-macos-latest/* tmp/mostlylucid-nmt/
-            cd tmp
-            tar -czvf ../release/mostlylucid-nmt-macos-x64.tar.gz mostlylucid-nmt
-            cd ..
-            rm -rf tmp
+            cp artifacts/build-macos-latest/mostlylucid-nmt release/mostlylucid-nmt-macos-x64
+            chmod +x release/mostlylucid-nmt-macos-x64
           fi
 
           # Generate checksums
@@ -206,30 +228,25 @@ jobs:
 
             Neural machine translation with Opus-MT, mBART50, and M2M100 models.
 
-            ### Downloads (CPU-only, compact builds)
+            ### Downloads (CPU-only, single executable)
 
-            | Platform | File | Size |
-            |----------|------|------|
-            | Windows | `mostlylucid-nmt-windows-x64.zip` | ~150MB |
-            | Linux | `mostlylucid-nmt-linux-x64.tar.gz` | ~150MB |
-            | macOS | `mostlylucid-nmt-macos-x64.tar.gz` | ~150MB |
+            | Platform | File |
+            |----------|------|
+            | Windows | `mostlylucid-nmt-windows-x64.exe` |
+            | Linux | `mostlylucid-nmt-linux-x64` |
+            | macOS | `mostlylucid-nmt-macos-x64` |
 
-            These are **CPU-only** builds for portability and small size. For **GPU acceleration**, use Docker (see below).
+            Single binary, no extraction needed. **CPU-only** for portability. For **GPU**, use Docker.
 
             ### Quick Start
 
             ```bash
-            # Extract
-            tar -xzf mostlylucid-nmt-linux-x64.tar.gz  # Linux/macOS
-            # Or unzip on Windows
+            # Download and run directly
+            chmod +x mostlylucid-nmt-linux-x64  # Linux/macOS only
+            ./mostlylucid-nmt-linux-x64 translate "Hello world" --to de
 
-            cd mostlylucid-nmt
-
-            # Translate directly
-            ./mostlylucid-nmt translate "Hello world" --to de
-
-            # Or start server for faster batch processing
-            ./mostlylucid-nmt server
+            # Or start server
+            ./mostlylucid-nmt-linux-x64 server
             ```
 
             ### CLI Commands
