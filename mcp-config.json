@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mostlylucid-nmt": {
+      "command": "mostlylucid-nmt",
+      "args": ["mcp"],
+      "env": {
+        "MODEL_FAMILY": "opus-mt"
+      }
+    }
+  }
+}

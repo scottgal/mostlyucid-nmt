@@ -154,33 +154,52 @@ Download pre-built executables from [GitHub Releases](https://github.com/scottga
 | macOS | `mostlylucid-nmt-macos-x64` |
 
 ```bash
-# Start the translation server
-./mostlylucid-nmt                  # Linux/Mac
-mostlylucid-nmt.exe                # Windows
+# Direct translation (no server required - loads model on demand)
+./mostlylucid-nmt translate "Hello world" --to de
+echo "Hello world" | ./mostlylucid-nmt translate --to de
 
-# Check if server is ready
-./mostlylucid-nmt --check
+# Start translation server (faster for multiple requests)
+./mostlylucid-nmt server
+./mostlylucid-nmt server --background
 
-# Translate text (requires running server)
-./mostlylucid-nmt --translate "Hello world" -s en -t de
-
-# Get server status (JSON)
-./mostlylucid-nmt --status
+# Utilities
+./mostlylucid-nmt languages          # List supported languages
+./mostlylucid-nmt status             # Check server status
+./mostlylucid-nmt info               # Show configuration
 ```
 
-**LLM CLI Tool Integration:**
+**Claude Code / LLM CLI Integration (MCP):**
+
+Add to your Claude Code settings (`~/.claude/settings.json` or project `.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "translate": {
+      "command": "mostlylucid-nmt",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Then Claude Code can use translation tools directly:
+- `translate` - Translate text between languages
+- `detect_language` - Detect the language of text
+- `list_languages` - Show available languages
+
+**CLI for scripting/piping:**
 ```bash
-# Start server in background mode
-./mostlylucid-nmt --background
+# JSON output for automation
+./mostlylucid-nmt translate "Hello" --to de --json
 
-# Translate with JSON output (for piping to other tools)
-./mostlylucid-nmt --translate "Your text" -s en -t de --json
+# Pipe from stdin
+cat document.txt | ./mostlylucid-nmt translate --to fr
 
-# Show configuration
-./mostlylucid-nmt --info
+# Uses running server if available, otherwise loads model directly
 ```
 
-Models are downloaded automatically on first use (~300MB for Opus-MT, ~2.4GB for mBART50/M2M100).
+Models download automatically on first use (~300MB for Opus-MT, ~2.4GB for mBART50/M2M100).
 
 ### Using Pre-built Docker Images (Recommended)
 
