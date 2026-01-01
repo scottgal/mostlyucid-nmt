@@ -183,7 +183,8 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Run on tag pushes OR manual dispatch with non-dev version
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != 'dev')
 
     steps:
       - name: Checkout
@@ -200,8 +201,15 @@ jobs:
       - name: Generate version string
         id: version
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          if [[ "${{ github.ref }}" =~ refs/tags/v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          elif [[ -n "${{ github.event.inputs.version }}" && "${{ github.event.inputs.version }}" != "dev" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="dev-$(date -u +%Y%m%d)"
+          fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Creating release for version: ${VERSION}"
 
       - name: Prepare release files
         run: |
