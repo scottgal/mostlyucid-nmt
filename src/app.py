@@ -203,18 +203,30 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Mount static demo at /demo
-app.mount("/demo", StaticFiles(directory="public", html=True), name="demo")
+# Mount static demo at /demo (only if public directory exists)
+import os
+if os.path.isdir("public"):
+    app.mount("/demo", StaticFiles(directory="public", html=True), name="demo")
 
-# Optional: redirect root to /demo
-@app.get(
-    "/",
-    summary="Root Redirect",
-    description="Redirects to the interactive demo UI"
-)
-async def root_redirect():
-    """Redirect root to demo UI."""
-    return RedirectResponse(url="/demo/")
+    # Redirect root to /demo when demo is available
+    @app.get(
+        "/",
+        summary="Root Redirect",
+        description="Redirects to the interactive demo UI"
+    )
+    async def root_redirect():
+        """Redirect root to demo UI."""
+        return RedirectResponse(url="/demo/")
+else:
+    # Standalone exe: redirect to API docs
+    @app.get(
+        "/",
+        summary="Root Redirect",
+        description="Redirects to API documentation"
+    )
+    async def root_redirect():
+        """Redirect root to API docs."""
+        return RedirectResponse(url="/docs")
 
 
 # Dependency injection functions
