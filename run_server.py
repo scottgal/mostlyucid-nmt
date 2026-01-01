@@ -40,7 +40,7 @@ def get_version() -> str:
         from src import __version__
         return __version__
     except ImportError:
-        return "3.2.0"
+        return "4.0.0"
 
 
 # =============================================================================

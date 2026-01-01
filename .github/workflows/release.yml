@@ -246,52 +246,113 @@ jobs:
           body: |
             ## MostlyLucid-NMT v${{ steps.version.outputs.version }}
 
-            Neural machine translation with Opus-MT, mBART50, and M2M100 models.
+            **Neural machine translation** with Opus-MT, mBART50, and M2M100 models. Supports 150+ languages with automatic model fallback.
 
-            ### Downloads (CPU-only, single executable)
+            ---
 
-            | Platform | File |
-            |----------|------|
-            | Windows | `mostlylucid-nmt-windows-x64.exe` |
-            | Linux | `mostlylucid-nmt-linux-x64` |
-            | macOS | `mostlylucid-nmt-macos-x64` |
+            ### Downloads
 
-            Single binary, no extraction needed. **CPU-only** for portability. For **GPU**, use Docker.
+            | Platform | File | Size |
+            |----------|------|------|
+            | Windows | `mostlylucid-nmt-windows-x64.exe` | ~200MB |
+            | Linux | `mostlylucid-nmt-linux-x64` | ~200MB |
+            | macOS | `mostlylucid-nmt-macos-x64` | ~200MB |
+
+            **Just download and run** - no Python, no installation, no dependencies required!
+
+            > **Note:** These are CPU-only executables for maximum portability. For GPU acceleration, use [Docker images](https://hub.docker.com/r/scottgal/mostlylucid-nmt).
+
+            ---
 
             ### Quick Start
 
             ```bash
-            # Download and run directly
-            chmod +x mostlylucid-nmt-linux-x64  # Linux/macOS only
-            ./mostlylucid-nmt-linux-x64 translate "Hello world" --to de
+            # Make executable (Linux/macOS)
+            chmod +x mostlylucid-nmt-linux-x64
 
-            # Or start server
-            ./mostlylucid-nmt-linux-x64 server
+            # Direct translation
+            ./mostlylucid-nmt translate "Hello world" --to de
+            # Output: Hallo Welt
+
+            # Pipe from stdin
+            cat document.txt | ./mostlylucid-nmt translate --to fr
+
+            # Start HTTP server with Swagger UI
+            ./mostlylucid-nmt server
+            # API docs at http://localhost:8000/docs
             ```
+
+            ---
 
             ### CLI Commands
 
-            ```bash
-            translate "text" --to de    # Direct translation (loads model)
-            server                       # Start HTTP server
-            server --background          # Run in background
-            languages                    # List supported languages
-            status                       # Check server status
+            | Command | Description |
+            |---------|-------------|
+            | `translate "text" --to de` | Direct translation (loads model on demand) |
+            | `server` | Start HTTP API server with Swagger UI |
+            | `server --background` | Run server as daemon |
+            | `mcp` | MCP server for Claude Code / LLM integration |
+            | `languages` | List all supported languages |
+            | `status` | Check server health and cache info |
+            | `info` | Show current configuration |
+            | `--version` | Show version |
+
+            ---
+
+            ### MCP Integration (Claude Code)
+
+            Add translation tools to your LLM workflow:
+
+            ```json
+            // ~/.claude/settings.json
+            {
+              "mcpServers": {
+                "translate": {
+                  "command": "mostlylucid-nmt",
+                  "args": ["mcp"]
+                }
+              }
+            }
             ```
+
+            ---
+
+            ### Model Families
+
+            Models download automatically on first use:
+
+            | Family | Download | Languages | Quality |
+            |--------|----------|-----------|---------|
+            | **Opus-MT** | ~300MB/pair | 150+ | Best |
+            | **mBART50** | ~2.4GB | 50 | Good |
+            | **M2M100** | ~2.2GB | 100 | Good |
+
+            ```bash
+            # Use specific model
+            ./mostlylucid-nmt translate "Hello" --to zh --model m2m100
+            ```
+
+            ---
 
             ### GPU Acceleration (Docker)
 
-            For GPU support, use Docker images instead:
-
             ```bash
-            # GPU with CUDA
+            # GPU with CUDA 12.6
             docker run --gpus all -p 8000:8000 scottgal/mostlylucid-nmt:gpu
 
-            # CPU Docker (alternative to standalone exe)
+            # CPU Docker
             docker run -p 8000:8000 scottgal/mostlylucid-nmt:cpu
             ```
 
-            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for full documentation.
+            ---
+
+            ### Checksums
+
+            SHA256 checksums are in `checksums.txt` for verification.
+
+            ---
+
+            **Full documentation:** [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) | [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
           files: |
             release/*
         env:

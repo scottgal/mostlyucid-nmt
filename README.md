@@ -148,32 +148,89 @@ docker run --gpus all scottgal/mostlylucid-nmt:gpu
 
 Download pre-built executables from [GitHub Releases](https://github.com/scottgal/mostlylucid-nmt/releases):
 
-| Platform | File |
-|----------|------|
-| Windows | `mostlylucid-nmt-windows-x64.exe` |
-| Linux | `mostlylucid-nmt-linux-x64` |
-| macOS | `mostlylucid-nmt-macos-x64` |
+| Platform | File | Size |
+|----------|------|------|
+| Windows | `mostlylucid-nmt-windows-x64.exe` | ~200MB |
+| Linux | `mostlylucid-nmt-linux-x64` | ~200MB |
+| macOS | `mostlylucid-nmt-macos-x64` | ~200MB |
+
+**Just download and run** - no Python, no installation, no dependencies!
 
 ```bash
-# Direct translation (no server required - loads model on demand)
+# Make executable (Linux/macOS only)
+chmod +x mostlylucid-nmt-linux-x64
+
+# Check version
+./mostlylucid-nmt --version
+
+# Direct translation (loads model on first use)
 ./mostlylucid-nmt translate "Hello world" --to de
-echo "Hello world" | ./mostlylucid-nmt translate --to de
+# Output: Hallo Welt
 
-# Start translation server (faster for multiple requests)
+# Pipe from stdin
+echo "Bonjour le monde" | ./mostlylucid-nmt translate --to en
+cat document.txt | ./mostlylucid-nmt translate --to de
+
+# Start HTTP server (Swagger UI at http://localhost:8000/docs)
 ./mostlylucid-nmt server
-./mostlylucid-nmt server --background
-
-# Utilities
-./mostlylucid-nmt languages          # List supported languages
-./mostlylucid-nmt status             # Check server status
-./mostlylucid-nmt info               # Show configuration
+./mostlylucid-nmt server --port 9000 --background  # Custom port, daemonized
 ```
 
-**Claude Code / LLM CLI Integration (MCP):**
+#### All CLI Commands
 
-Add to your Claude Code settings (`~/.claude/settings.json` or project `.claude/settings.json`):
+| Command | Description | Example |
+|---------|-------------|---------|
+| `translate` | Translate text directly | `translate "Hello" --to de` |
+| `server` | Start HTTP API server | `server --port 8000` |
+| `mcp` | MCP server for LLM integration | `mcp` |
+| `languages` | List supported languages | `languages --json` |
+| `status` | Check server health & cache | `status` |
+| `info` | Show configuration | `info` |
+
+#### CLI Options
+
+```bash
+# Global options
+--version, -v         Show version
+--json, -j            JSON output format
+--host                Server host (default: 127.0.0.1)
+--port, -p            Server port (default: 8000)
+
+# translate options
+--to, -t              Target language (required)
+--source, -s          Source language (default: en, or auto-detect)
+--model, -m           Model family: opus-mt, mbart50, m2m100
+
+# server options
+--workers, -w         Number of workers (default: 1)
+--reload              Auto-reload for development
+--background, -b      Run as daemon
+```
+
+#### Smart Server Detection
+
+The CLI is smart about performance:
+1. **If server is running**: Uses HTTP API (fast, model already loaded)
+2. **If no server**: Loads model directly (slower first time, but works standalone)
+
+```bash
+# First translation loads model (~30 seconds)
+./mostlylucid-nmt translate "Hello" --to de
+
+# Subsequent translations are instant (model cached)
+./mostlylucid-nmt translate "Goodbye" --to de
+
+# Or start server for best performance with many translations
+./mostlylucid-nmt server --background
+./mostlylucid-nmt translate "Hello" --to de  # Uses running server
+```
+
+#### MCP Server Mode (Claude Code / LLM Integration)
+
+Integrate translation directly into your LLM workflow:
 
 ```json
+// ~/.claude/settings.json (or project .claude/settings.json)
 {
   "mcpServers": {
     "translate": {
@@ -184,23 +241,59 @@ Add to your Claude Code settings (`~/.claude/settings.json` or project `.claude/
 }
 ```
 
-Then Claude Code can use translation tools directly:
-- `translate` - Translate text between languages
-- `detect_language` - Detect the language of text
-- `list_languages` - Show available languages
+Claude Code can then use these tools:
+- **translate** - Translate text between any supported language pair
+- **detect_language** - Identify the language of input text
+- **list_languages** - Get all available languages for current model
 
-**CLI for scripting/piping:**
+#### JSON Output for Automation
+
 ```bash
-# JSON output for automation
-./mostlylucid-nmt translate "Hello" --to de --json
+# Machine-readable output
+./mostlylucid-nmt translate "Hello world" --to de --json
+# {"source": ["Hello world"], "translated": ["Hallo Welt"], "source_lang": "en", "target_lang": "de"}
 
-# Pipe from stdin
-cat document.txt | ./mostlylucid-nmt translate --to fr
+./mostlylucid-nmt status --json
+# {"running": true, "host": "127.0.0.1", "port": 8000, "cache": {"size": 2, "capacity": 10}}
 
-# Uses running server if available, otherwise loads model directly
+./mostlylucid-nmt languages --json
+# {"model_family": "opus-mt", "languages": ["en", "de", "fr", ...]}
 ```
 
-Models download automatically on first use (~300MB for Opus-MT, ~2.4GB for mBART50/M2M100).
+#### Model Downloads
+
+Models download automatically on first use and are cached:
+
+| Model Family | First Download | Quality | Languages |
+|--------------|----------------|---------|-----------|
+| **Opus-MT** | ~300MB per pair | Best | 150+ |
+| **mBART50** | ~2.4GB once | Good | 50 |
+| **M2M100** | ~2.2GB once | Good | 100 |
+
+```bash
+# Use specific model family
+./mostlylucid-nmt translate "Hello" --to de --model mbart50
+
+# Set default via environment
+export MODEL_FAMILY=m2m100
+./mostlylucid-nmt translate "Hello" --to zh
+```
+
+#### Environment Variables for Standalone Exe
+
+```bash
+# Model selection
+MODEL_FAMILY=opus-mt        # opus-mt, mbart50, or m2m100
+MODEL_CACHE_DIR=./models    # Where to cache downloaded models
+
+# Performance
+USE_GPU=false               # Standalone is CPU-only
+EASYNMT_BATCH_SIZE=8        # Batch size for translation
+MAX_CACHED_MODELS=5         # Number of models to keep in memory
+
+# Logging
+LOG_LEVEL=INFO              # DEBUG, INFO, WARNING, ERROR
+```
 
 ### Using Pre-built Docker Images (Recommended)
 

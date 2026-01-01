@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-01-01
+
+Major release introducing **standalone executables** and **CTranslate2 backend** for dramatically smaller, faster deployments.
+
+### Added
+
+#### Standalone Executables (No Python Required)
+- **Pre-built binaries** for Windows, Linux, and macOS via GitHub Releases
+- **Single-file executables** (~200MB) built with Nuitka - just download and run
+- **Full CLI interface** with commands:
+  - `translate "text" --to de` - Direct translation (loads model on demand)
+  - `server` - Start HTTP server with Swagger UI
+  - `server --background` - Daemonized server mode
+  - `mcp` - MCP server mode for LLM tool integration (Claude Code, etc.)
+  - `languages` - List all supported languages
+  - `status` - Check if server is running and get cache info
+  - `info` - Show current configuration as JSON
+- **Stdin piping support**: `cat file.txt | mostlylucid-nmt translate --to de`
+- **JSON output mode**: `--json` flag for scripting and automation
+- **Smart server detection**: Uses running server if available, otherwise loads model directly
+
+#### MCP Server Mode (LLM Integration)
+- **Model Context Protocol support** for Claude Code and other LLM CLIs
+- Configure in `~/.claude/settings.json`:
+  ```json
+  {"mcpServers": {"translate": {"command": "mostlylucid-nmt", "args": ["mcp"]}}}
+  ```
+- Available tools: `translate`, `detect_language`, `list_languages`
+
+#### CTranslate2 Translation Backend
+- **~10x smaller package size**: 18MB vs 200MB+ for PyTorch
+- **~4x less memory usage** at runtime
+- **~2-10x faster CPU inference** with INT8 quantization support
+- **Automatic model conversion**: Converts HuggingFace models to CT2 format on first use
+- **Pre-converted model support**: Uses `michaelfeil/ct2fast-*` models when available
+- **Hybrid backend**: Falls back to PyTorch for GPU Docker images
+- Configuration: `TRANSLATION_BACKEND=ct2`, `CT2_COMPUTE_TYPE=auto`, `CT2_INTER_THREADS=1`
+
+#### GitHub Actions Release Workflow
+- **Automated builds** for all 3 platforms on tag push or manual dispatch
+- **Nuitka compilation** with optimized settings for smallest executable size
+- **Artifact upload** with SHA256 checksums
+- **Automatic GitHub Release creation** with comprehensive release notes
+
+### Changed
+- **Version bump to 4.0.0** - Major version due to new architecture (CT2 backend, standalone exe)
+- Default version in run_server.py updated
+- Build system now uses Nuitka instead of PyInstaller for smaller executables
+
+### Fixed
+- **macOS build**: Fixed `find -executable` (BSD) to use `-perm +111` instead
+- **langdetect data**: Added `--include-package-data=langdetect` for language detection
+- **Distribution metadata**: Added all required `--include-distribution-metadata` packages:
+  - sacremoses, sentencepiece, tokenizers, transformers, huggingface-hub, ctranslate2
+- **huggingface_hub naming**: Fixed to use hyphen (`huggingface-hub`) not underscore
+
+### Technical Details
+- Standalone exe size: ~200MB (compressed from ~1GB payload)
+- Build time: ~30-45 minutes on fast hardware
+- Supports Python 3.11+ (3.13 tested)
+- No CUDA in standalone exe (CPU-only for portability)
+- GPU acceleration via Docker images unchanged
+
 ## [3.5.0] - 2025-11-30
 
 ### Changed
