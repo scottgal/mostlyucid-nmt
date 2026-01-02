@@ -65,6 +65,55 @@ class Config:
         "tr", "uk", "ur", "uz", "vi", "wo", "xh", "yi", "yo", "zh",
     ]
 
+    # HY-MT language codes (33 languages + dialects from Tencent Hunyuan)
+    # See: https://github.com/Tencent-Hunyuan/HY-MT
+    HYMT_LANGS: List[str] = [
+        # Major languages
+        "zh", "en", "fr", "es", "pt", "ja", "ru", "ar", "ko", "de",
+        "it", "vi", "id", "th", "pl", "nl", "cs", "tr", "el", "hu",
+        "ro", "sv", "da", "fi", "no", "sk", "bg", "uk", "hr", "sr",
+        "sl", "lt", "lv", "et",
+        # Note: HY-MT also supports zh-tw (Traditional Chinese) and yue (Cantonese)
+        # but we map those through zh for simplicity
+    ]
+
+    # HY-MT model variant: "1.8B" or "7B"
+    HYMT_MODEL_SIZE: str = os.getenv("HYMT_MODEL_SIZE", "1.8B")
+
+    # HY-MT generation parameters (recommended by Tencent)
+    HYMT_TOP_K: int = int(os.getenv("HYMT_TOP_K", "20"))
+    HYMT_TOP_P: float = float(os.getenv("HYMT_TOP_P", "0.6"))
+    HYMT_TEMPERATURE: float = float(os.getenv("HYMT_TEMPERATURE", "0.7"))
+    HYMT_REPETITION_PENALTY: float = float(os.getenv("HYMT_REPETITION_PENALTY", "1.05"))
+    HYMT_MAX_NEW_TOKENS: int = int(os.getenv("HYMT_MAX_NEW_TOKENS", "2048"))
+
+    # MADLAD-400 language codes (400+ languages - this is a subset of major ones)
+    # Full list: https://huggingface.co/google/madlad400-3b-mt
+    # Uses BCP-47 language codes with <2xx> prefix format
+    MADLAD_LANGS: List[str] = [
+        # Major European languages
+        "en", "de", "fr", "es", "it", "pt", "nl", "pl", "ru", "uk",
+        "cs", "sk", "hu", "ro", "bg", "hr", "sr", "sl", "mk", "sq",
+        "el", "tr", "fi", "sv", "da", "no", "is", "lt", "lv", "et",
+        # Asian languages
+        "zh", "ja", "ko", "vi", "th", "id", "ms", "tl", "my", "km",
+        "lo", "bn", "hi", "ur", "ta", "te", "ml", "kn", "gu", "mr",
+        "pa", "ne", "si", "mn", "ka", "hy", "az", "kk", "uz", "ky",
+        "tg", "tk", "fa", "ps", "ku",
+        # Middle Eastern / African
+        "ar", "he", "am", "ti", "so", "sw", "ha", "yo", "ig", "zu",
+        "xh", "af", "sn", "ny", "rw", "lg", "wo", "mg",
+        # Other
+        "eu", "ca", "gl", "cy", "ga", "gd", "mt", "lb", "eo", "la",
+        "ht", "ceb", "jv", "su", "haw", "sm", "mi", "to", "fj",
+    ]
+
+    # MADLAD model variant: "3b", "7b", or "10b"
+    MADLAD_MODEL_SIZE: str = os.getenv("MADLAD_MODEL_SIZE", "3b").lower()
+
+    # MADLAD max length for generation
+    MADLAD_MAX_LENGTH: int = int(os.getenv("MADLAD_MAX_LENGTH", "256"))
+
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()  # Changed default from DEBUG to INFO
     REQUEST_LOG: bool = os.getenv("REQUEST_LOG", "1").lower() in ("1", "true", "yes")  # Changed default to enabled
@@ -240,6 +289,10 @@ class Config:
             return cls.MBART50_LANGS
         elif cls.MODEL_FAMILY == "m2m100":
             return cls.M2M100_LANGS
+        elif cls.MODEL_FAMILY == "hymt":
+            return cls.HYMT_LANGS
+        elif cls.MODEL_FAMILY == "madlad":
+            return cls.MADLAD_LANGS
         else:  # opus-mt
             return cls.SUPPORTED_LANGS
 

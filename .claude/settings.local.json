@@ -48,7 +48,15 @@
       "Bash(powershell -Command:*)",
       "Bash(E:/source/mostlylucid-nmt/mostlylucid-nmt.exe:*)",
       "Bash(git tag:*)",
-      "Bash(E:sourcemostlylucid-nmtdistmostlylucid-nmt.exe --version)"
+      "Bash(E:sourcemostlylucid-nmtdistmostlylucid-nmt.exe --version)",
+      "Bash(.venv/Scripts/pip.exe:*)",
+      "Bash(E:/source/mostlylucid-nmt/.venv/Scripts/pip.exe show:*)",
+      "Bash(E:/source/mostlylucid-nmt/.venv/Scripts/python.exe:*)",
+      "Bash(.venvScriptspyinstaller mostlylucid_nmt.spec --clean)",
+      "Bash(E:/source/mostlylucid-nmt/.venv/Scripts/pyinstaller.exe:*)",
+      "Bash(E:/source/mostlylucid-nmt/dist/mostlylucid-nmt.exe:*)",
+      "Bash(E:/source/mostlylucid-nmt/.venv/Scripts/pip.exe install:*)",
+      "Bash(set PYTHONIOENCODING=utf-8:*)"
     ],
     "deny": [],
     "ask": []
