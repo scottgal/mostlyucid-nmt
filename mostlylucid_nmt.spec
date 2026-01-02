@@ -32,13 +32,31 @@ datas += collect_data_files('langdetect', include_py_files=False)
 # Include our source package
 datas += [('src', 'src')]
 
+# Collect all torch submodules to avoid circular import issues
+torch_hidden = collect_submodules('torch')
+
 # Hidden imports - minimal set for translation only
-hiddenimports = [
-    # FastAPI core only
+hiddenimports = torch_hidden + [
+    # FastAPI/Starlette
     'fastapi',
+    'fastapi.staticfiles',
+    'starlette',
     'starlette.responses',
     'starlette.routing',
+    'starlette.staticfiles',
+    'starlette.middleware',
+    'starlette.middleware.cors',
     'uvicorn',
+    'uvicorn.logging',
+    'uvicorn.loops',
+    'uvicorn.loops.auto',
+    'uvicorn.protocols',
+    'uvicorn.protocols.http',
+    'uvicorn.protocols.http.auto',
+    'uvicorn.protocols.websockets',
+    'uvicorn.protocols.websockets.auto',
+    'uvicorn.lifespan',
+    'uvicorn.lifespan.on',
 
     # Pydantic
     'pydantic',
@@ -49,11 +67,6 @@ hiddenimports = [
     'httpcore',
     'anyio',
     'h11',
-
-    # PyTorch - minimal CPU only
-    'torch',
-    'torch.nn',
-    'torch.nn.functional',
 
     # Transformers - only what we need for 3 model types
     'transformers',
@@ -96,18 +109,17 @@ excludes = [
     'setuptools', 'pkg_resources', 'pip', 'wheel', 'distutils',
     'pytest', 'test', 'tests', 'unittest',
 
-    # CUDA/GPU (CPU-only build)
-    'torch.cuda', 'torch.backends.cuda', 'torch.backends.cudnn',
-    'torch.distributed', 'torch._inductor', 'torch.compiler',
+    # CUDA/GPU extras (keep torch.cuda and torch.distributed for compatibility)
+    'torch._inductor', 'torch.compiler',
     'triton', 'nvidia', 'cudnn', 'nccl',
 
-    # Unused torch
+    # Unused torch extras (keep core torch modules)
     'torch.onnx', 'torch.jit', 'torch.fx',
-    'torch.testing', 'torch.profiler', 'torch.autograd.profiler',
+    'torch.profiler', 'torch.autograd.profiler',
     'torch.utils.tensorboard', 'torch.utils.benchmark',
     'torch.utils.bottleneck', 'torch.utils.cpp_extension',
     'torch.utils.mobile_optimizer', 'torch.quantization',
-    'torch.ao', 'torch.sparse', 'torch.nested',
+    'torch.ao', 'torch.nested',
 
     # Unused transformers (we only need marian, mbart, m2m_100)
     'transformers.onnx', 'transformers.trainer', 'transformers.training_args',
@@ -178,8 +190,8 @@ excludes = [
     # MCP optional
     'mcp',
 
-    # Email/network we don't need
-    'email', 'smtplib', 'ftplib', 'telnetlib', 'xmlrpc',
+    # Network we don't need
+    'smtplib', 'ftplib', 'telnetlib', 'xmlrpc',
 ]
 
 a = Analysis(

@@ -1,5 +1,13 @@
 """Main FastAPI application with dependency injection."""
 
+# CRITICAL: Import torch first to avoid circular import issues in frozen executables
+# This must happen before any other imports that might trigger torch loading
+try:
+    import torch
+    import torch.nn
+except ImportError:
+    pass  # torch not required for all operations
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager

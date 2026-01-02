@@ -24,21 +24,44 @@ if config.TRANSLATION_BACKEND == "ct2":
         logger.warning(f"CTranslate2 backend requested but not available: {e}")
         CT2_AVAILABLE = False
 
-# Transformers pipeline (only import if using transformers backend or as fallback)
-try:
-    from transformers import pipeline as transformers_pipeline
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    transformers_pipeline = None  # type: ignore
-    TRANSFORMERS_AVAILABLE = False
+# Transformers pipeline - LAZY import for PyInstaller compatibility
+# In frozen executables, importing transformers at module level causes circular import errors
+# We defer the import to first actual use when torch is guaranteed to be fully initialized
+_transformers_pipeline = None
+_transformers_import_attempted = False
+_transformers_import_error = None
 
-# Log backend availability
+def _get_transformers_pipeline():
+    """Lazily import and return the transformers pipeline function.
+
+    This defers the import until first actual use, ensuring torch is fully
+    initialized before transformers tries to use torch.nn.
+    """
+    global _transformers_pipeline, _transformers_import_attempted, _transformers_import_error
+
+    if _transformers_import_attempted:
+        return _transformers_pipeline
+
+    _transformers_import_attempted = True
+
+    try:
+        # Import torch first to ensure it's fully initialized
+        import torch
+        import torch.nn
+
+        # Now import transformers
+        from transformers import pipeline as tf_pipeline
+        _transformers_pipeline = tf_pipeline
+        logger.info("Translation backend: PyTorch/Transformers (lazy loaded)")
+    except ImportError as e:
+        _transformers_import_error = e
+        logger.warning(f"Transformers backend not available: {e}")
+
+    return _transformers_pipeline
+
+# Log backend availability at startup (CT2 only, transformers is lazy)
 if CT2_AVAILABLE:
     logger.info("Translation backend: CTranslate2")
-elif TRANSFORMERS_AVAILABLE:
-    logger.info("Translation backend: PyTorch/Transformers")
-else:
-    logger.error("No translation backend available! Install ctranslate2 or torch+transformers")
 
 # Enable beautiful download progress bars
 setup_hf_progress()
@@ -162,7 +185,7 @@ class ModelManager:
                 # Use CT2 backend if available
                 if CT2_AVAILABLE and config.TRANSLATION_BACKEND == "ct2":
                     pl = self._load_ct2_translator(src, tgt, family, key)
-                elif TRANSFORMERS_AVAILABLE:
+                elif _get_transformers_pipeline() is not None:
                     pl = self._load_transformers_pipeline(src, tgt, family, key)
                 else:
                     raise ModelLoadError(
@@ -326,7 +349,8 @@ class ModelManager:
             pipeline_kwargs["src_lang"] = src_lang
             pipeline_kwargs["tgt_lang"] = tgt_lang
 
-        pl = transformers_pipeline("translation", **pipeline_kwargs)
+        pipeline_func = _get_transformers_pipeline()
+        pl = pipeline_func("translation", **pipeline_kwargs)
 
         # Apply Pi-specific post-load optimizations
         if hasattr(pl, 'model'):

@@ -43,7 +43,12 @@
       "Bash(curl.exe:*)",
       "Bash(cat:*)",
       "Bash(.venvScriptspython.exe -m pytest tests/test_ct2*.py -v --tb=short)",
-      "Bash(E:\\\\source\\\\mostlylucid-nmt\\\\.venv\\\\Scripts\\\\python.exe -m pytest:*)"
+      "Bash(E:\\\\source\\\\mostlylucid-nmt\\\\.venv\\\\Scripts\\\\python.exe -m pytest:*)",
+      "Bash(E:\\\\source\\\\mostlylucid-nmt\\\\.venv\\\\Scripts\\\\pip.exe show:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(E:/source/mostlylucid-nmt/mostlylucid-nmt.exe:*)",
+      "Bash(git tag:*)",
+      "Bash(E:sourcemostlylucid-nmtdistmostlylucid-nmt.exe --version)"
     ],
     "deny": [],
     "ask": []

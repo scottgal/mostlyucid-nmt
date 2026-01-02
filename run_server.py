@@ -24,6 +24,19 @@ Usage:
     python run_server.py status
 """
 
+# CRITICAL: Import and initialize torch FULLY before any other imports
+# This avoids circular import issues in frozen executables (PyInstaller)
+# The warmup ensures torch is completely initialized before transformers uses torch.nn
+try:
+    import torch
+    import torch.nn
+    import torch.nn.functional
+    # Warmup: create a small tensor to force full torch initialization
+    _ = torch.tensor([1.0])
+    _torch_ready = True
+except ImportError:
+    _torch_ready = False  # torch not required for all operations
+
 import argparse
 import json
 import os
@@ -192,8 +205,12 @@ def run_server(host: str, port: int, workers: int, reload: bool):
     """Run the uvicorn server."""
     import uvicorn
 
+    # Pre-import the app to ensure torch is in the module context
+    # This helps avoid circular import issues in frozen executables
+    from src.app import app as application
+
     uvicorn.run(
-        "src.app:app",
+        application,  # Pass app object directly instead of string
         host=host,
         port=port,
         workers=workers,
