@@ -32,8 +32,43 @@ datas += collect_data_files('langdetect', include_py_files=False)
 # Include our source package
 datas += [('src', 'src')]
 
-# Collect all torch submodules to avoid circular import issues
-torch_hidden = collect_submodules('torch')
+# Minimal torch imports - DO NOT use collect_submodules('torch') as it adds 2GB+ of CUDA libs
+# Only include the core modules needed for CPU inference
+torch_hidden = [
+    'torch',
+    'torch.nn',
+    'torch.nn.functional',
+    'torch.nn.modules',
+    'torch.nn.modules.linear',
+    'torch.nn.modules.conv',
+    'torch.nn.modules.activation',
+    'torch.nn.modules.normalization',
+    'torch.nn.modules.dropout',
+    'torch.nn.modules.container',
+    'torch.nn.modules.transformer',
+    'torch.nn.modules.sparse',
+    'torch.nn.modules.rnn',
+    'torch.nn.modules.pooling',
+    'torch.nn.modules.padding',
+    'torch.nn.modules.loss',
+    'torch.nn.modules.batchnorm',
+    'torch.nn.modules.instancenorm',
+    'torch.nn.modules.lazy',
+    'torch.nn.modules.fold',
+    'torch.nn.modules.flatten',
+    'torch.nn.modules.distance',
+    'torch.nn.modules.adaptive',
+    'torch.nn.modules.pixelshuffle',
+    'torch.nn.modules.upsampling',
+    'torch.nn.modules.channelshuffle',
+    'torch._C',
+    'torch.utils',
+    'torch.utils.data',
+    'torch.serialization',
+    'torch.storage',
+    'torch.autograd',
+    'torch.tensor',
+]
 
 # Hidden imports - minimal set for translation only
 hiddenimports = torch_hidden + [
@@ -109,9 +144,14 @@ excludes = [
     'setuptools', 'pkg_resources', 'pip', 'wheel', 'distutils',
     'pytest', 'test', 'tests', 'unittest',
 
-    # CUDA/GPU extras (keep torch.cuda and torch.distributed for compatibility)
-    'torch._inductor', 'torch.compiler',
+    # CUDA/GPU - AGGRESSIVELY exclude all CUDA libs (exe is CPU-only)
+    'torch.cuda', 'torch.backends.cuda', 'torch.backends.cudnn',
+    'torch._inductor', 'torch.compiler', 'torch.distributed',
     'triton', 'nvidia', 'cudnn', 'nccl',
+    'nvidia_cublas_cu12', 'nvidia_cuda_cupti_cu12', 'nvidia_cuda_nvrtc_cu12',
+    'nvidia_cuda_runtime_cu12', 'nvidia_cudnn_cu12', 'nvidia_cufft_cu12',
+    'nvidia_curand_cu12', 'nvidia_cusolver_cu12', 'nvidia_cusparse_cu12',
+    'nvidia_nccl_cu12', 'nvidia_nvjitlink_cu12', 'nvidia_nvtx_cu12',
 
     # Unused torch extras (keep core torch modules)
     'torch.onnx', 'torch.jit', 'torch.fx',

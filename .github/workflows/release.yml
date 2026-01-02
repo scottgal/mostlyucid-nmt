@@ -69,8 +69,15 @@ jobs:
           # PyInstaller for building executables
           pip install pyinstaller
 
-          # Install all requirements for the translation service
+          # Install CPU-only PyTorch FIRST to avoid 2GB+ CUDA libs
+          # This must be done before requirements.txt which might pull GPU torch
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+          # Install requirements (torch already satisfied with CPU version)
           pip install -r requirements.txt
+
+          # Verify we got CPU-only torch (should be ~200MB, not 2GB+)
+          python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')"
 
       - name: Generate version string
         id: version
