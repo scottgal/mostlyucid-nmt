@@ -6,15 +6,50 @@ import ctranslate2
 from src.config import config
 from src.core.logging import logger
 
-# Lazy import for AutoTokenizer to avoid torch circular import in frozen executables
+# Import AutoTokenizer at module level - this must happen AFTER torch is fully initialized
+# In frozen executables, the runtime hook (pyi_rth_torch.py) stores AutoTokenizer in builtins
+# This avoids circular import issues when worker threads try to import transformers
 _AutoTokenizer = None
 
-def _get_auto_tokenizer():
-    """Lazily import AutoTokenizer to defer torch loading."""
+def _init_auto_tokenizer():
+    """Initialize AutoTokenizer from builtins or direct import."""
     global _AutoTokenizer
-    if _AutoTokenizer is None:
+    if _AutoTokenizer is not None:
+        return
+
+    # First, check if runtime hook pre-loaded AutoTokenizer into builtins
+    import builtins
+    if hasattr(builtins, '_AUTOTOKENIZER_CLASS'):
+        _AutoTokenizer = builtins._AUTOTOKENIZER_CLASS
+        logger.info("Using AutoTokenizer from runtime hook (builtins)")
+        return
+
+    # Fallback: try importing directly (works in non-frozen environments)
+    try:
         from transformers import AutoTokenizer
         _AutoTokenizer = AutoTokenizer
+        logger.info("Imported AutoTokenizer directly")
+    except ImportError as e:
+        logger.warning(f"Failed to import AutoTokenizer at module level: {e}")
+
+# Initialize at module load time
+_init_auto_tokenizer()
+
+def _get_auto_tokenizer():
+    """Get AutoTokenizer class, importing if not yet loaded."""
+    global _AutoTokenizer
+    if _AutoTokenizer is None:
+        # Last resort: try importing again (may work if torch is now initialized)
+        import builtins
+        if hasattr(builtins, '_AUTOTOKENIZER_CLASS'):
+            _AutoTokenizer = builtins._AUTOTOKENIZER_CLASS
+            return _AutoTokenizer
+
+        try:
+            from transformers import AutoTokenizer
+            _AutoTokenizer = AutoTokenizer
+        except ImportError as e:
+            raise ImportError(f"Cannot import AutoTokenizer: {e}") from e
     return _AutoTokenizer
 
 

@@ -119,25 +119,6 @@ Auto-selected based on what's installed. You normally don't need to configure th
 
 ---
 
-## Standalone Executable
-
-Download pre-built executables from [GitHub Releases](https://github.com/scottgal/mostlylucid-nmt/releases) (~80-200MB depending on platform):
-
-```bash
-# Direct translation
-./mostlylucid-nmt translate "Hello world" --to de
-
-# Start HTTP server
-./mostlylucid-nmt server --port 8000
-
-# MCP server for LLM integration
-./mostlylucid-nmt mcp
-```
-
-No Python, no installation, no dependencies.
-
----
-
 ## Reference
 
 <details>

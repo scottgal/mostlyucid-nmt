@@ -14,6 +14,18 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+# Increase recursion limit for PyInstaller's module analysis
+# This helps with deeply nested imports in torch and transformers
+sys.setrecursionlimit(5000)
+
+# Module collection mode: Use source files (pyz+py) for problematic packages
+# This prevents bytecode optimization issues with torch's lazy initialization
+# See: https://github.com/orgs/pyinstaller/discussions/7944
+module_collection_mode = {
+    'torch': 'pyz+py',
+    'transformers': 'pyz+py',
+}
+
 # Collect necessary data files
 datas = []
 
@@ -74,6 +86,8 @@ torch_hidden = [
     'torch.storage',
     'torch.autograd',
     'torch.tensor',
+    'torch.jit',  # Required for torch initialization
+    'torch.fx',   # Required for some torch internals
 ]
 
 # Hidden imports - minimal set for translation only
@@ -163,7 +177,8 @@ excludes = [
     'nvidia_nccl_cu12', 'nvidia_nvjitlink_cu12', 'nvidia_nvtx_cu12',
 
     # Unused torch extras (keep core torch modules)
-    'torch.onnx', 'torch.jit', 'torch.fx',
+    # NOTE: torch.jit and torch.fx are needed for torch initialization
+    'torch.onnx',
     'torch.profiler', 'torch.autograd.profiler',
     'torch.utils.tensorboard', 'torch.utils.benchmark',
     'torch.utils.bottleneck', 'torch.utils.cpp_extension',
@@ -251,12 +266,13 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['pyi_rth_torch.py'],  # Initialize torch before any imports
     excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
+    module_collection_mode=module_collection_mode,  # Source-level collection for torch
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)

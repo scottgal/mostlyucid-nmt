@@ -1,20 +1,10 @@
 #!/usr/bin/env python3
-"""Standalone entry point for MostlyLucid-NMT translation server.
-
-This script provides a CLI interface for running the translation service,
-designed to work both as a standalone executable and as a tool for LLM CLIs.
+"""CLI interface for MostlyLucid-NMT translation.
 
 Usage:
-    # Start server (default)
-    python run_server.py
-
-    # Direct translation (no server required - loads model on demand)
+    # Direct translation (loads model on demand)
     python run_server.py translate "Hello world" --to de
     echo "Hello world" | python run_server.py translate --to de
-
-    # Server mode
-    python run_server.py server --port 8080
-    python run_server.py server --background
 
     # MCP server mode (for LLM tool integration)
     python run_server.py mcp
@@ -22,34 +12,16 @@ Usage:
     # Utilities
     python run_server.py languages
     python run_server.py status
+    python run_server.py info
+
+For HTTP server mode, use Docker or uvicorn directly:
+    uvicorn src.app:app --host 0.0.0.0 --port 8000
 """
-
-# CRITICAL: Import and initialize torch FULLY before any other imports
-# This avoids circular import issues in frozen executables (PyInstaller)
-# The warmup ensures torch is completely initialized before transformers uses torch.nn
-try:
-    import torch
-    import torch.nn
-    import torch.nn.functional
-    # Warmup: create a small tensor to force full torch initialization
-    _ = torch.tensor([1.0])
-    _torch_ready = True
-
-    # Also pre-import transformers to avoid circular imports later
-    # This ensures AutoTokenizer is ready when CT2 wrapper needs it
-    from transformers import AutoTokenizer
-    _transformers_ready = True
-except ImportError:
-    _torch_ready = False  # torch not required for all operations
-    _transformers_ready = False
 
 import argparse
 import json
 import os
 import sys
-import time
-import subprocess
-from pathlib import Path
 from typing import Optional, List
 
 
@@ -82,7 +54,6 @@ def translate_direct(
         os.environ["MODEL_FAMILY"] = model_family
 
     from src.services.model_manager import model_manager
-    from src.config import config
 
     # Get the translation pipeline
     pipeline = model_manager.get_pipeline(source_lang, target_lang)
@@ -94,6 +65,52 @@ def translate_direct(
     if isinstance(results, list):
         return [r.get("translation_text", r) if isinstance(r, dict) else str(r) for r in results]
     return [str(results)]
+
+
+def check_server(host: str = "127.0.0.1", port: int = 8000) -> bool:
+    """Check if server is running and ready."""
+    try:
+        import httpx
+        response = httpx.get(f"http://{host}:{port}/readyz", timeout=2.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def translate_via_server(
+    texts: List[str],
+    source_lang: str,
+    target_lang: str,
+    host: str = "127.0.0.1",
+    port: int = 8000
+) -> dict:
+    """Translate via running server."""
+    import httpx
+
+    response = httpx.post(
+        f"http://{host}:{port}/translate",
+        json={
+            "text": texts,
+            "source_lang": source_lang,
+            "target_lang": target_lang
+        },
+        timeout=120.0
+    )
+    return response.json()
+
+
+def output_result(result: dict, as_json: bool):
+    """Output translation result."""
+    if as_json:
+        print(json.dumps(result))
+    else:
+        if "translated" in result:
+            for t in result["translated"]:
+                print(t)
+        elif "error" in result:
+            print(f"Error: {result['error']}", file=sys.stderr)
+        else:
+            print(json.dumps(result))
 
 
 def cmd_translate(args):
@@ -145,137 +162,6 @@ def cmd_translate(args):
         else:
             print(f"Error: {e}", file=sys.stderr)
         return 1
-
-
-# =============================================================================
-# Server Mode
-# =============================================================================
-
-def check_server(host: str = "127.0.0.1", port: int = 8000) -> bool:
-    """Check if server is running and ready."""
-    try:
-        import httpx
-        response = httpx.get(f"http://{host}:{port}/readyz", timeout=2.0)
-        return response.status_code == 200
-    except Exception:
-        return False
-
-
-def wait_for_server(host: str = "127.0.0.1", port: int = 8000, timeout: int = 120) -> bool:
-    """Wait for server to become ready."""
-    start = time.time()
-    while time.time() - start < timeout:
-        if check_server(host, port):
-            return True
-        time.sleep(1)
-    return False
-
-
-def translate_via_server(
-    texts: List[str],
-    source_lang: str,
-    target_lang: str,
-    host: str = "127.0.0.1",
-    port: int = 8000
-) -> dict:
-    """Translate via running server."""
-    import httpx
-
-    response = httpx.post(
-        f"http://{host}:{port}/translate",
-        json={
-            "text": texts,
-            "source_lang": source_lang,
-            "target_lang": target_lang
-        },
-        timeout=120.0
-    )
-    return response.json()
-
-
-def output_result(result: dict, as_json: bool):
-    """Output translation result."""
-    if as_json:
-        print(json.dumps(result))
-    else:
-        if "translated" in result:
-            for t in result["translated"]:
-                print(t)
-        elif "error" in result:
-            print(f"Error: {result['error']}", file=sys.stderr)
-        else:
-            print(json.dumps(result))
-
-
-def run_server(host: str, port: int, workers: int, reload: bool):
-    """Run the uvicorn server."""
-    import uvicorn
-
-    # Pre-import the app to ensure torch is in the module context
-    # This helps avoid circular import issues in frozen executables
-    from src.app import app as application
-
-    uvicorn.run(
-        application,  # Pass app object directly instead of string
-        host=host,
-        port=port,
-        workers=workers,
-        reload=reload,
-        log_level="info"
-    )
-
-
-def run_background(host: str, port: int) -> int:
-    """Start server in background and return PID."""
-    script = f'''
-import uvicorn
-uvicorn.run("src.app:app", host="{host}", port={port}, log_level="warning")
-'''
-
-    if sys.platform == "win32":
-        process = subprocess.Popen(
-            [sys.executable, "-c", script],
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            cwd=os.getcwd()
-        )
-    else:
-        process = subprocess.Popen(
-            [sys.executable, "-c", script],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            cwd=os.getcwd()
-        )
-
-    return process.pid
-
-
-def cmd_server(args):
-    """Handle the server command."""
-    if args.background:
-        pid = run_background(args.host, args.port)
-        print(f"Server started in background (PID: {pid})")
-        print("Waiting for server to be ready...")
-
-        if wait_for_server(args.host, args.port, timeout=120):
-            print(f"Server ready at http://{args.host}:{args.port}")
-            return 0
-        else:
-            print("Warning: Server may still be starting up", file=sys.stderr)
-            return 0
-
-    print(f"Starting MostlyLucid-NMT v{get_version()}")
-    print(f"Server: http://{args.host}:{args.port}")
-    print(f"Docs:   http://{args.host}:{args.port}/docs")
-    print("Press Ctrl+C to stop")
-
-    try:
-        run_server(args.host, args.port, args.workers, args.reload)
-    except KeyboardInterrupt:
-        print("\nShutting down...")
-    return 0
 
 
 # =============================================================================
@@ -484,17 +370,13 @@ def cmd_info(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="mostlylucid-nmt",
-        description="Neural Machine Translation - CLI and Server",
+        description="Neural Machine Translation CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Direct translation (loads model on demand)
   %(prog)s translate "Hello world" --to de
   echo "Bonjour" | %(prog)s translate --to en
-
-  # Server mode (faster for multiple translations)
-  %(prog)s server
-  %(prog)s server --background
 
   # MCP mode (for LLM tool integration)
   %(prog)s mcp
@@ -503,6 +385,10 @@ Examples:
   %(prog)s languages
   %(prog)s status
   %(prog)s info
+
+For HTTP server mode, use Docker or uvicorn:
+  docker run -p 8000:8000 mostlylucid-nmt
+  uvicorn src.app:app --host 0.0.0.0 --port 8000
 
 Environment Variables:
   MODEL_FAMILY          opus-mt, mbart50, or m2m100 (default: opus-mt)
@@ -528,15 +414,6 @@ Environment Variables:
     p_translate.add_argument("--port", "-p", type=int, default=8000, help=argparse.SUPPRESS)
     p_translate.set_defaults(func=cmd_translate)
 
-    # server command
-    p_server = subparsers.add_parser("server", aliases=["s"], help="Start translation server")
-    p_server.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
-    p_server.add_argument("--port", "-p", type=int, default=8000, help="Port (default: 8000)")
-    p_server.add_argument("--workers", "-w", type=int, default=1, help="Workers (default: 1)")
-    p_server.add_argument("--reload", action="store_true", help="Auto-reload for development")
-    p_server.add_argument("--background", "-b", action="store_true", help="Run in background")
-    p_server.set_defaults(func=cmd_server)
-
     # mcp command
     p_mcp = subparsers.add_parser("mcp", help="Run as MCP server (for LLM tool integration)")
     p_mcp.set_defaults(func=cmd_mcp)
@@ -559,12 +436,10 @@ Environment Variables:
 
     args = parser.parse_args()
 
-    # Default to server if no command given
+    # Show help if no command given
     if not args.command:
-        args.func = cmd_server
-        args.background = False
-        args.workers = 1
-        args.reload = False
+        parser.print_help()
+        return 0
 
     return args.func(args)
 

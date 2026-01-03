@@ -76,7 +76,11 @@
       "Bash(py -3.12 -c:*)",
       "Bash(del E:sourcemostlylucid-nmtpyi_rth_torch.py)",
       "Bash(echo:*)",
-      "Bash(docker exec nmt-test python:*)"
+      "Bash(docker exec nmt-test python:*)",
+      "Bash(set PYINSTALLER_ONEDIR=1)",
+      "Bash(start /b E:/source/mostlylucid-nmt/dist/mostlylucid-nmt.exe:*)",
+      "WebFetch(domain:discuss.pytorch.org)",
+      "Bash(powershell -ExecutionPolicy Bypass -File E:/source/mostlylucid-nmt/cleanup.ps1)"
     ],
     "deny": [],
     "ask": []

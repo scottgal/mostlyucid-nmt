@@ -131,6 +131,12 @@ async def lifespan(app: FastAPI):
             import torch
             import torch.nn
             from transformers import AutoTokenizer
+
+            # CRITICAL: Set the ct2_wrapper's _AutoTokenizer global so worker threads
+            # don't trigger the import again (which causes circular import in frozen exes)
+            import src.core.ct2_wrapper as ct2_wrapper_module
+            ct2_wrapper_module._AutoTokenizer = AutoTokenizer
+
             logger.info("[Lifespan] Pre-loaded torch and transformers for thread safety")
         except ImportError as e:
             logger.warning(f"[Lifespan] Could not pre-load torch/transformers: {e}")
