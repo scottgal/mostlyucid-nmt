@@ -34,8 +34,14 @@ try:
     # Warmup: create a small tensor to force full torch initialization
     _ = torch.tensor([1.0])
     _torch_ready = True
+
+    # Also pre-import transformers to avoid circular imports later
+    # This ensures AutoTokenizer is ready when CT2 wrapper needs it
+    from transformers import AutoTokenizer
+    _transformers_ready = True
 except ImportError:
     _torch_ready = False  # torch not required for all operations
+    _transformers_ready = False
 
 import argparse
 import json

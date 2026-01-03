@@ -125,6 +125,16 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up translation service...")
 
     try:
+        # CRITICAL: Force-import torch and transformers BEFORE creating thread pools
+        # In frozen executables, these imports must happen in the main thread first
+        try:
+            import torch
+            import torch.nn
+            from transformers import AutoTokenizer
+            logger.info("[Lifespan] Pre-loaded torch and transformers for thread safety")
+        except ImportError as e:
+            logger.warning(f"[Lifespan] Could not pre-load torch/transformers: {e}")
+
         # Initialize executors
         logger.info("Initializing executors...")
         _backend_executor = ThreadPoolExecutor(max_workers=max(1, config.MAX_WORKERS_BACKEND))

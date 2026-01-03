@@ -261,9 +261,8 @@ class Config:
 
     # CTranslate2 configuration
     # Backend selection: "ct2" (CTranslate2, recommended) or "transformers" (PyTorch, legacy)
-    # For frozen executables (PyInstaller), default to transformers since ct2 isn't bundled
-    _is_frozen = getattr(sys, 'frozen', False)
-    TRANSLATION_BACKEND: str = os.getenv("TRANSLATION_BACKEND", "transformers" if _is_frozen else "ct2").lower()
+    # CT2 is preferred for both source and frozen executables (faster, smaller footprint)
+    TRANSLATION_BACKEND: str = os.getenv("TRANSLATION_BACKEND", "ct2").lower()
 
     # CT2 quantization: "default", "float16", "int8", "int8_float16"
     CT2_QUANTIZATION: str = os.getenv("CT2_QUANTIZATION", "default")

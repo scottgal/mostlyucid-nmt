@@ -2,10 +2,48 @@
 
 from typing import Any, Dict, List, Optional
 import ctranslate2
-from transformers import AutoTokenizer
 
 from src.config import config
 from src.core.logging import logger
+
+# Lazy import for AutoTokenizer to avoid torch circular import in frozen executables
+_AutoTokenizer = None
+
+def _get_auto_tokenizer():
+    """Lazily import AutoTokenizer to defer torch loading."""
+    global _AutoTokenizer
+    if _AutoTokenizer is None:
+        from transformers import AutoTokenizer
+        _AutoTokenizer = AutoTokenizer
+    return _AutoTokenizer
+
+
+# mBART50 language code mapping (2-letter -> mBART format)
+# mBART uses specific codes like de_DE, not de_XX for most languages
+MBART50_LANG_CODES = {
+    "ar": "ar_AR", "cs": "cs_CZ", "de": "de_DE", "en": "en_XX", "es": "es_XX",
+    "et": "et_EE", "fi": "fi_FI", "fr": "fr_XX", "gu": "gu_IN", "hi": "hi_IN",
+    "it": "it_IT", "ja": "ja_XX", "kk": "kk_KZ", "ko": "ko_KR", "lt": "lt_LT",
+    "lv": "lv_LV", "my": "my_MM", "ne": "ne_NP", "nl": "nl_XX", "ro": "ro_RO",
+    "ru": "ru_RU", "si": "si_LK", "tr": "tr_TR", "vi": "vi_VN", "zh": "zh_CN",
+    "af": "af_ZA", "az": "az_AZ", "bn": "bn_IN", "fa": "fa_IR", "he": "he_IL",
+    "hr": "hr_HR", "id": "id_ID", "ka": "ka_GE", "km": "km_KH", "mk": "mk_MK",
+    "ml": "ml_IN", "mn": "mn_MN", "mr": "mr_IN", "pl": "pl_PL", "ps": "ps_AF",
+    "pt": "pt_XX", "sv": "sv_SE", "sw": "sw_KE", "ta": "ta_IN", "te": "te_IN",
+    "th": "th_TH", "tl": "tl_XX", "uk": "uk_UA", "ur": "ur_PK", "xh": "xh_ZA",
+    "gl": "gl_ES", "sl": "sl_SI",
+}
+
+
+def _normalize_lang_code(lang: str) -> str:
+    """Normalize language code to 2-letter format.
+
+    mBART50 codes come in as 'de_XX' from model_manager but we need 'de'
+    to look them up in MBART50_LANG_CODES dictionary.
+    """
+    if "_" in lang:
+        return lang.split("_")[0]
+    return lang
 
 
 class CT2TranslatorWrapper:
@@ -65,8 +103,9 @@ class CT2TranslatorWrapper:
 
         self.translator = ctranslate2.Translator(model_path, **translator_kwargs)
 
-        # Initialize tokenizer
+        # Initialize tokenizer (lazy import to avoid torch circular import)
         logger.info(f"Loading tokenizer from {tokenizer_name}")
+        AutoTokenizer = _get_auto_tokenizer()
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
         # Configure tokenizer for multilingual models
@@ -77,14 +116,18 @@ class CT2TranslatorWrapper:
     def _configure_multilingual(self):
         """Configure tokenizer for multilingual models."""
         if self.family == "mbart50":
-            # mBART50 uses lang_code with _XX suffix
-            src_code = f"{self.src_lang}_XX"
+            # mBART50 uses specific language codes (e.g., de_DE, not de_XX)
+            # Normalize input (may come as "de_XX" from model_manager)
+            src_normalized = _normalize_lang_code(self.src_lang)
+            src_code = MBART50_LANG_CODES.get(src_normalized, f"{src_normalized}_XX")
             if hasattr(self.tokenizer, 'src_lang'):
                 self.tokenizer.src_lang = src_code
+                logger.info(f"mBART50 source language set to: {src_code}")
         elif self.family == "m2m100":
             # M2M100 uses plain lang codes
+            src_normalized = _normalize_lang_code(self.src_lang)
             if hasattr(self.tokenizer, 'src_lang'):
-                self.tokenizer.src_lang = self.src_lang
+                self.tokenizer.src_lang = src_normalized
 
     def _get_target_prefix(self) -> Optional[List[List[str]]]:
         """Get target language prefix tokens for multilingual models.
@@ -93,19 +136,26 @@ class CT2TranslatorWrapper:
             List of token lists (one per input), or None for non-multilingual models
         """
         if self.family == "mbart50":
-            # mBART50: target starts with target language token
-            tgt_code = f"{self.tgt_lang}_XX"
+            # mBART50: target starts with target language token (e.g., de_DE, not de_XX)
+            # Normalize input (may come as "es_XX" from model_manager)
+            tgt_normalized = _normalize_lang_code(self.tgt_lang)
+            tgt_code = MBART50_LANG_CODES.get(tgt_normalized, f"{tgt_normalized}_XX")
             if hasattr(self.tokenizer, 'lang_code_to_id'):
-                lang_token = self.tokenizer.convert_ids_to_tokens(
-                    self.tokenizer.lang_code_to_id.get(tgt_code, 0)
-                )
-                return [[lang_token]]
+                lang_id = self.tokenizer.lang_code_to_id.get(tgt_code)
+                if lang_id is not None:
+                    lang_token = self.tokenizer.convert_ids_to_tokens(lang_id)
+                    logger.info(f"mBART50 target prefix: {tgt_code} -> {lang_token}")
+                    return [[lang_token]]
+                else:
+                    logger.warning(f"mBART50 language code {tgt_code} not found in tokenizer")
             return None
 
         elif self.family == "m2m100":
             # M2M100: target starts with target language token
+            # Normalize input (may come as "es_XX" from model_manager)
+            tgt_normalized = _normalize_lang_code(self.tgt_lang)
             if hasattr(self.tokenizer, 'lang_code_to_id'):
-                lang_id = self.tokenizer.lang_code_to_id.get(self.tgt_lang)
+                lang_id = self.tokenizer.lang_code_to_id.get(tgt_normalized)
                 if lang_id is not None:
                     lang_token = self.tokenizer.convert_ids_to_tokens(lang_id)
                     return [[lang_token]]

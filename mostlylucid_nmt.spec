@@ -34,8 +34,14 @@ datas += [('src', 'src')]
 
 # Minimal torch imports - DO NOT use collect_submodules('torch') as it adds 2GB+ of CUDA libs
 # Only include the core modules needed for CPU inference
+# Note: torch.cuda must be included as torch/__init__.py imports it during initialization
 torch_hidden = [
     'torch',
+    'torch.cuda',  # Required for torch init even on CPU builds
+    'torch.backends',
+    'torch.backends.cuda',
+    'torch.backends.cudnn',
+    'torch.distributed',  # Required by dataloader
     'torch.nn',
     'torch.nn.functional',
     'torch.nn.modules',
@@ -126,6 +132,9 @@ hiddenimports = torch_hidden + [
     'sacremoses',
     'langdetect',
 
+    # CTranslate2 - fast inference backend (preferred for CPU)
+    'ctranslate2',
+
     # Utilities
     'tqdm',
     'psutil',
@@ -144,9 +153,9 @@ excludes = [
     'setuptools', 'pkg_resources', 'pip', 'wheel', 'distutils',
     'pytest', 'test', 'tests', 'unittest',
 
-    # CUDA/GPU - AGGRESSIVELY exclude all CUDA libs (exe is CPU-only)
-    'torch.cuda', 'torch.backends.cuda', 'torch.backends.cudnn',
-    'torch._inductor', 'torch.compiler', 'torch.distributed',
+    # CUDA/GPU - Exclude CUDA *runtime libraries* but NOT core torch modules
+    # torch.cuda and torch.distributed are needed for torch init (even on CPU)
+    'torch._inductor', 'torch.compiler',
     'triton', 'nvidia', 'cudnn', 'nccl',
     'nvidia_cublas_cu12', 'nvidia_cuda_cupti_cu12', 'nvidia_cuda_nvrtc_cu12',
     'nvidia_cuda_runtime_cu12', 'nvidia_cudnn_cu12', 'nvidia_cufft_cu12',

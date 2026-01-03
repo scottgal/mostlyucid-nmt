@@ -102,15 +102,19 @@ def _get_transformers_pipeline():
     try:
         # Import torch first to ensure it's fully initialized
         import torch
+        logger.info(f"[Backend] torch imported: {torch.__version__}")
         import torch.nn
+        logger.info("[Backend] torch.nn imported")
 
         # Now import transformers
         from transformers import pipeline as tf_pipeline
         _transformers_pipeline = tf_pipeline
         logger.info("Translation backend: PyTorch/Transformers (lazy loaded)")
     except ImportError as e:
+        import traceback
         _transformers_import_error = e
         logger.warning(f"Transformers backend not available: {e}")
+        logger.warning(f"Import traceback:\n{traceback.format_exc()}")
 
     return _transformers_pipeline
 
@@ -265,10 +269,11 @@ class ModelManager:
                 elif _get_transformers_pipeline() is not None:
                     pl = self._load_transformers_pipeline(src, tgt, family, key)
                 else:
-                    raise ModelLoadError(
-                        f"{src}->{tgt}",
-                        ImportError("No translation backend available. Install ctranslate2 or transformers.")
-                    )
+                    # Include the actual import error for debugging
+                    error_detail = f"No translation backend available. Install ctranslate2 or transformers."
+                    if _transformers_import_error:
+                        error_detail += f" (transformers import failed: {_transformers_import_error})"
+                    raise ModelLoadError(f"{src}->{tgt}", ImportError(error_detail))
 
                 return pl
 
