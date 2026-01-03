@@ -5,7 +5,9 @@
 [![cpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/cpu?label=cpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 [![gpu](https://img.shields.io/docker/v/scottgal/mostlylucid-nmt/gpu?label=gpu)](https://hub.docker.com/r/scottgal/mostlylucid-nmt)
 
-A production-ready FastAPI service providing an EasyNMT-compatible HTTP API for machine translation.
+A drop-in EasyNMT replacement that runs locally, survives long-running workloads, and won't OOM your server when someone pastes a book into it.
+
+> **Not a hosted SaaS, not a black box API.** This project optimises for predictability, bounded memory, and failure modes you can reason about.
 
 **Why this exists (the practical bits):**
 - **On-demand model loading + LRU eviction** to avoid OOM and keep long-running services stable
@@ -19,7 +21,9 @@ Swagger: `/docs` · ReDoc: `/redoc` · **[Complete Guide](https://www.mostlyluci
 
 ## Quick Start
 
-### CPU (persistent cache)
+> **Just want a single binary?** Skip Docker — see [Standalone Executable](#standalone-executable) below.
+
+### CPU (persistent cache) — most users start here
 ```bash
 docker run -p 8000:8000 \
   -v ./model-cache:/models \
@@ -37,7 +41,10 @@ docker run --gpus all -p 8000:8000 \
   scottgal/mostlylucid-nmt:gpu
 ```
 
-### Highest Quality (LLM-based, GPU required)
+### Highest Quality (LLM-based, GPU required, significantly slower)
+
+> **Reality check:** 7B models require 16GB+ VRAM and are 50-100x slower than opus-mt. They are not a free upgrade.
+
 ```bash
 # HY-MT: Best quality for major languages (en, zh, de, fr, es, ja, ko, etc.)
 docker run --gpus all -p 8000:8000 \
@@ -60,7 +67,6 @@ docker run --gpus all -p 8000:8000 \
 
 > **Important (GPU):** `USE_GPU=true` does nothing unless you run with `--gpus all`.
 > **Important (cache):** Without `-v ./model-cache:/models` + `MODEL_CACHE_DIR=/models`, models re-download on every restart.
-> **Note:** HY-MT/MADLAD are slower but produce higher quality translations. Requires 16GB+ VRAM for 7B models.
 
 ### Try the API
 ```bash
@@ -72,6 +78,15 @@ curl -X POST http://localhost:8000/translate \
 ---
 
 ## Model Families
+
+**Quick chooser:**
+
+| If you want…                  | Use               |
+|-------------------------------|-------------------|
+| Fast, cheap, production       | opus-mt (default) |
+| One model, many languages     | m2m100            |
+| Best quality major languages  | hymt              |
+| Rare / low-resource languages | madlad            |
 
 Set via `MODEL_FAMILY` environment variable or per-request with `"model_family": "..."`:
 
