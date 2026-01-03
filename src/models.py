@@ -12,7 +12,7 @@ class TranslatePostBody(BaseModel):
     source_lang: str = Field(default="", description="Source language code (empty for auto-detect)")
     beam_size: int = Field(default=5, ge=1, description="Beam size for translation")
     perform_sentence_splitting: bool = Field(default=True, description="Whether to split sentences")
-    model_family: Optional[str] = Field(default=None, description="Model family to use (opus-mt, mbart50, m2m100). Uses server default if not specified.")
+    model_family: Optional[str] = Field(default=None, description="Model family to use: opus-mt (fast), mbart50 (50 langs), m2m100 (100 langs), hymt (highest quality), madlad (400+ langs). Uses server default if not specified.")
 
     @validator("text")
     def validate_text(cls, v):
@@ -39,7 +39,7 @@ class TranslationMetadata(BaseModel):
     """Optional metadata for translation response."""
 
     model_name: str = Field(..., description="Model used for translation")
-    model_family: str = Field(..., description="Model family (opus-mt, mbart50, m2m100)")
+    model_family: str = Field(..., description="Model family (opus-mt, mbart50, m2m100, hymt, madlad)")
     languages_used: List[str] = Field(..., description="All languages used (including pivot if applicable)")
     chunks_processed: int = Field(..., description="Number of chunks processed")
     chunk_size: int = Field(..., description="Max characters per chunk")
