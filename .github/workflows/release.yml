@@ -101,14 +101,25 @@ jobs:
       - name: Build with PyInstaller
         shell: bash
         run: |
-          python -m PyInstaller mostlylucid_nmt.spec --clean
-          ls -la dist/
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            # Windows: use onedir mode (better AV compatibility)
+            export PYINSTALLER_ONEDIR=1
+            python -m PyInstaller mostlylucid_nmt.spec --clean
+            # Zip the folder for distribution
+            cd dist
+            7z a -tzip mostlylucid-nmt-windows.zip mostlylucid-nmt/
+            ls -la
+          else
+            # Linux/macOS: use onefile mode
+            python -m PyInstaller mostlylucid_nmt.spec --clean
+            ls -la dist/
+          fi
 
       - name: Test executable
         shell: bash
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
-            ./dist/mostlylucid-nmt.exe --version || echo "Version check done"
+            ./dist/mostlylucid-nmt/mostlylucid-nmt.exe --version || echo "Version check done"
           else
             chmod +x ./dist/mostlylucid-nmt
             ./dist/mostlylucid-nmt --version || echo "Version check done"
@@ -119,7 +130,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
-            SIZE=$(du -sm dist/mostlylucid-nmt.exe | cut -f1)
+            SIZE=$(du -sm dist/mostlylucid-nmt-windows.zip | cut -f1)
           else
             SIZE=$(du -sm dist/mostlylucid-nmt | cut -f1)
           fi
@@ -130,7 +141,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.os }}
-          path: dist/mostlylucid-nmt${{ runner.os == 'Windows' && '.exe' || '' }}
+          path: ${{ runner.os == 'Windows' && 'dist/mostlylucid-nmt-windows.zip' || 'dist/mostlylucid-nmt' }}
           retention-days: 7
 
       - name: Build summary
@@ -179,7 +190,8 @@ jobs:
 
           # Copy executables with proper names
           if [ -d "artifacts/build-windows-latest" ]; then
-            cp artifacts/build-windows-latest/mostlylucid-nmt.exe release/mostlylucid-nmt-windows-x64.exe
+            # Windows is a zip file (onedir mode for better AV compatibility)
+            cp artifacts/build-windows-latest/mostlylucid-nmt-windows.zip release/mostlylucid-nmt-windows-x64.zip
           fi
 
           if [ -d "artifacts/build-ubuntu-latest" ]; then
@@ -216,11 +228,44 @@ jobs:
 
             | Platform | File | Size |
             |----------|------|------|
-            | Windows | `mostlylucid-nmt-windows-x64.exe` | ~175MB |
+            | Windows | `mostlylucid-nmt-windows-x64.zip` | ~175MB |
             | Linux | `mostlylucid-nmt-linux-x64` | ~175MB |
             | macOS | `mostlylucid-nmt-macos-x64` | ~175MB |
 
-            **Just download and run** - no Python, no installation, no dependencies required!
+            > **Windows Users:** Extract the zip file, then run `mostlylucid-nmt.exe` from the extracted folder.
+            > If you encounter antivirus issues, try [Docker](https://hub.docker.com/r/scottgal/mostlylucid-nmt) or run from source (see below).
+
+            <details>
+            <summary><strong>Run from Source (Windows/Linux/macOS)</strong></summary>
+
+            ```bash
+            # Clone the repo
+            git clone https://github.com/${{ github.repository }}.git
+            cd mostlylucid-nmt
+
+            # Create virtual environment
+            python -m venv .venv
+
+            # Activate it
+            # Windows:
+            .venv\Scripts\activate
+            # Linux/macOS:
+            source .venv/bin/activate
+
+            # Install dependencies
+            pip install -r requirements.txt
+
+            # Run the server (Swagger UI at http://localhost:8000/docs)
+            python -m uvicorn src.app:app --host 0.0.0.0 --port 8000
+
+            # Or translate directly
+            python run_server.py translate "Hello world" --to de
+            ```
+
+            </details>
+
+            **Linux/macOS:** Just download and run - no Python required!
+            **Windows:** Extract zip, then run `mostlylucid-nmt.exe` from the folder.
 
             > **Note:** These are CPU-only executables for maximum portability. For GPU acceleration, use [Docker images](https://hub.docker.com/r/scottgal/mostlylucid-nmt).
 

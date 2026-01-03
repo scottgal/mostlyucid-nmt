@@ -252,24 +252,58 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# Single executable (onefile mode)
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='mostlylucid-nmt',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=True,  # Strip symbols to reduce size
-    upx=False,   # UPX causes issues with torch
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=None,
-)
+# Check if we're building onedir (for Windows) or onefile (for Linux/macOS)
+import os
+ONEDIR_MODE = os.environ.get('PYINSTALLER_ONEDIR', '0') == '1'
+
+if ONEDIR_MODE:
+    # Windows: onedir mode - creates folder with separate DLLs (better AV compatibility)
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='mostlylucid-nmt',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,  # Don't strip on Windows
+        upx=False,
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=False,
+        name='mostlylucid-nmt',
+    )
+else:
+    # Linux/macOS: onefile mode - single executable
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name='mostlylucid-nmt',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=True,  # Strip symbols to reduce size
+        upx=False,   # UPX causes issues with torch
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=None,
+    )

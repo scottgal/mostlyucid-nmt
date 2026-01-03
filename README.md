@@ -37,8 +37,30 @@ docker run --gpus all -p 8000:8000 \
   scottgal/mostlylucid-nmt:gpu
 ```
 
+### Highest Quality (LLM-based, GPU required)
+```bash
+# HY-MT: Best quality for major languages (en, zh, de, fr, es, ja, ko, etc.)
+docker run --gpus all -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_CACHE_DIR=/models \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=hymt \
+  -e HYMT_MODEL_SIZE=7B \
+  scottgal/mostlylucid-nmt:gpu
+
+# MADLAD: 400+ languages including rare/low-resource
+docker run --gpus all -p 8000:8000 \
+  -v ./model-cache:/models \
+  -e MODEL_CACHE_DIR=/models \
+  -e USE_GPU=true \
+  -e MODEL_FAMILY=madlad \
+  -e MADLAD_MODEL_SIZE=7b \
+  scottgal/mostlylucid-nmt:gpu
+```
+
 > **Important (GPU):** `USE_GPU=true` does nothing unless you run with `--gpus all`.
 > **Important (cache):** Without `-v ./model-cache:/models` + `MODEL_CACHE_DIR=/models`, models re-download on every restart.
+> **Note:** HY-MT/MADLAD are slower but produce higher quality translations. Requires 16GB+ VRAM for 7B models.
 
 ### Try the API
 ```bash
